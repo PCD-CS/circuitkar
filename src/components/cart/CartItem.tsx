@@ -55,6 +55,7 @@ export function CartItem({
         <div className="mt-2 flex items-center justify-between gap-2">
           <Stepper
             value={item.quantity}
+            max={product.in_stock && product.stock_count > 0 ? product.stock_count : 99}
             onChange={(q) => updateQty(item.id, q)}
           />
           <button

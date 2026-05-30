@@ -18,6 +18,7 @@ interface AllSettings {
   store_email: string;
   whatsapp_number: string;
   free_shipping_threshold: string;
+  shipping_charge: string;
   admin_email: string;
   // Payments
   razorpay_key_id_test: string;
@@ -45,7 +46,7 @@ interface AllSettings {
 
 const DEFAULTS: AllSettings = {
   launch_mode: "prelaunch", maintenance_message: "", announcement_text: "", announcement_enabled: "true",
-  site_name: "Circuitkar", store_email: "", whatsapp_number: "", free_shipping_threshold: "499", admin_email: "",
+  site_name: "Circuitkar", store_email: "", whatsapp_number: "", free_shipping_threshold: "499", shipping_charge: "100", admin_email: "",
   razorpay_key_id_test: "", razorpay_key_secret_test: "", razorpay_key_id_live: "", razorpay_key_secret_live: "", razorpay_use_live: "false",
   shiprocket_email: "", shiprocket_password: "", shiprocket_pickup_location: "Primary", shiprocket_auto_create: "false",
   resend_api_key: "", resend_from_email: "orders@circuitkar.in", resend_from_name: "Circuitkar", send_order_emails: "true", send_notifyme_emails: "true",
@@ -90,7 +91,7 @@ export default function SettingsPage() {
 
   function isDirty(tab: string): boolean {
     const keys: Record<string, (keyof AllSettings)[]> = {
-      store: ["launch_mode", "maintenance_message", "announcement_text", "announcement_enabled", "site_name", "store_email", "whatsapp_number", "free_shipping_threshold", "admin_email"],
+      store: ["launch_mode", "maintenance_message", "announcement_text", "announcement_enabled", "site_name", "store_email", "whatsapp_number", "free_shipping_threshold", "shipping_charge", "admin_email"],
       payments: ["razorpay_key_id_test", "razorpay_key_secret_test", "razorpay_key_id_live", "razorpay_key_secret_live", "razorpay_use_live"],
       shipping: ["shiprocket_email", "shiprocket_password", "shiprocket_pickup_location", "shiprocket_auto_create"],
       email: ["resend_api_key", "resend_from_email", "resend_from_name", "send_order_emails", "send_notifyme_emails"],
@@ -242,9 +243,10 @@ export default function SettingsPage() {
               <Input label="Store Email" type="email" value={settings.store_email} onChange={e => set("store_email", e.target.value)} placeholder="hello@circuitkar.in" />
               <Input label="Admin Email (notifications)" type="email" value={settings.admin_email} onChange={e => set("admin_email", e.target.value)} />
             </div>
+            <Input label="WhatsApp Number" value={settings.whatsapp_number} onChange={e => set("whatsapp_number", e.target.value)} placeholder="919XXXXXXXXX" />
             <div className="grid grid-cols-2 gap-4">
-              <Input label="WhatsApp Number" value={settings.whatsapp_number} onChange={e => set("whatsapp_number", e.target.value)} placeholder="919XXXXXXXXX" />
               <Input label="Free Shipping Threshold (₹)" type="number" value={settings.free_shipping_threshold} onChange={e => set("free_shipping_threshold", e.target.value)} />
+              <Input label="Flat Shipping Charge (₹)" type="number" value={settings.shipping_charge} onChange={e => set("shipping_charge", e.target.value)} placeholder="100" />
             </div>
             <div className="border border-[#262626] rounded-lg p-4">
               <p className="text-xs font-mono text-[#525252] uppercase tracking-wider mb-3">Announcement Bar</p>
@@ -259,17 +261,59 @@ export default function SettingsPage() {
         {/* Tab 2: Payments */}
         {activeTab === "payments" && (
           <div className="space-y-5">
-            <Toggle k="razorpay_use_live" label="Use Live Keys" description="Switch from test to live Razorpay keys. Only enable when ready." />
-            <div className="space-y-4 border border-[#262626] rounded-lg p-4">
-              <p className="text-xs font-mono text-[#525252] uppercase tracking-wider">Test Keys</p>
+            <div className="border border-[#262626] rounded-lg p-4">
+              <p className="text-xs font-mono text-[#525252] uppercase tracking-wider mb-3">Payment Mode</p>
+              <div className="flex gap-3">
+                <button type="button" onClick={() => set("razorpay_use_live", "false")}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-colors ${
+                    settings.razorpay_use_live !== "true"
+                      ? "bg-[#22C55E]/15 border-[#22C55E] text-[#22C55E]"
+                      : "border-[#262626] text-[#A3A3A3] hover:border-[#525252]"
+                  }`}>
+                  {settings.razorpay_use_live !== "true" ? "✓ Test Mode (Active)" : "Test Mode"}
+                </button>
+                <button type="button" onClick={() => set("razorpay_use_live", "true")}
+                  className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-colors ${
+                    settings.razorpay_use_live === "true"
+                      ? "bg-[#F97316]/15 border-[#F97316] text-[#F97316]"
+                      : "border-[#262626] text-[#A3A3A3] hover:border-[#525252]"
+                  }`}>
+                  {settings.razorpay_use_live === "true" ? "✓ Live Mode (Active)" : "Live Mode"}
+                </button>
+              </div>
+              <p className="text-xs text-[#525252] mt-2">
+                {settings.razorpay_use_live === "true"
+                  ? "Live mode: real payments will be charged. Only one mode can be active at a time."
+                  : "Test mode: no real payments. Use test cards to verify integration."}
+              </p>
+            </div>
+
+            <div className={`space-y-4 border rounded-lg p-4 transition-opacity ${
+              settings.razorpay_use_live !== "true" ? "border-[#22C55E]/40 bg-[#22C55E]/5" : "border-[#262626] opacity-50"
+            }`}>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-mono text-[#525252] uppercase tracking-wider">Test Keys</p>
+                {settings.razorpay_use_live !== "true" && (
+                  <span className="text-[10px] font-mono font-bold text-[#22C55E] border border-[#22C55E]/40 rounded px-1.5 py-0.5">ACTIVE</span>
+                )}
+              </div>
               <MaskedInput k="razorpay_key_id_test" label="Key ID (Test)" placeholder="rzp_test_..." />
               <MaskedInput k="razorpay_key_secret_test" label="Key Secret (Test)" placeholder="••••••••••" />
             </div>
-            <div className="space-y-4 border border-[#262626] rounded-lg p-4">
-              <p className="text-xs font-mono text-[#525252] uppercase tracking-wider">Live Keys</p>
+
+            <div className={`space-y-4 border rounded-lg p-4 transition-opacity ${
+              settings.razorpay_use_live === "true" ? "border-[#F97316]/40 bg-[#F97316]/5" : "border-[#262626] opacity-50"
+            }`}>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-mono text-[#525252] uppercase tracking-wider">Live Keys</p>
+                {settings.razorpay_use_live === "true" && (
+                  <span className="text-[10px] font-mono font-bold text-[#F97316] border border-[#F97316]/40 rounded px-1.5 py-0.5">ACTIVE</span>
+                )}
+              </div>
               <MaskedInput k="razorpay_key_id_live" label="Key ID (Live)" placeholder="rzp_live_..." />
               <MaskedInput k="razorpay_key_secret_live" label="Key Secret (Live)" placeholder="••••••••••" />
             </div>
+
             <TestBtn type="razorpay" />
           </div>
         )}

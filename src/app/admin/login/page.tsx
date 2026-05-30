@@ -94,7 +94,7 @@ export default function AdminLoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
-              placeholder="chirag.sanghvi05@gmail.com"
+              placeholder="admin@example.com"
             />
             <Input
               label="Password"

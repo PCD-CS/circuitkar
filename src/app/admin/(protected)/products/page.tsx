@@ -3,12 +3,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Plus, ExternalLink, Pencil, Search, X, Package } from "lucide-react";
+import { Plus, ExternalLink, Pencil, Search, X, Package, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { ProductWithCategory } from "@/types";
 
-const PAGE_SIZE = 20;
+type SortField = "name" | "price" | "created_at";
+type SortDir = "asc" | "desc";
+
+const PAGE_SIZES = [10, 25, 50] as const;
 
 /* ── Quantity modal shown when enabling in_stock ── */
 function StockModal({
@@ -61,22 +64,39 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   );
 }
 
+function SortIcon({ field, sortBy, sortDir }: { field: SortField; sortBy: SortField; sortDir: SortDir }) {
+  if (sortBy !== field) {
+    return <ChevronsUpDown className="w-3.5 h-3.5 opacity-0 group-hover:opacity-40 transition-opacity" />;
+  }
+  return sortDir === "asc"
+    ? <ChevronUp className="w-3.5 h-3.5 text-[#F97316]" />
+    : <ChevronDown className="w-3.5 h-3.5 text-[#F97316]" />;
+}
+
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<typeof PAGE_SIZES[number]>(25);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [sortBy, setSortBy] = useState<SortField>("created_at");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
   const [stockModal, setStockModal] = useState<ProductWithCategory | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const totalPages = Math.ceil(total / pageSize);
 
-  const fetchProducts = useCallback(async (p: number, q: string) => {
+  const fetchProducts = useCallback(async (p: number, q: string, ps: number, sb: SortField, sd: SortDir) => {
     setLoading(true);
-    const params = new URLSearchParams({ page: String(p), pageSize: String(PAGE_SIZE) });
+    const params = new URLSearchParams({
+      page: String(p),
+      pageSize: String(ps),
+      sortBy: sb,
+      sortDir: sd,
+    });
     if (q.trim()) params.set("search", q.trim());
     const res = await fetch(`/api/admin/products?${params}`);
     const data = await res.json();
@@ -85,9 +105,10 @@ export default function AdminProductsPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchProducts(page, search); }, [fetchProducts, page, search]);
+  useEffect(() => {
+    fetchProducts(page, search, pageSize, sortBy, sortDir);
+  }, [fetchProducts, page, search, pageSize, sortBy, sortDir]);
 
-  // Debounced search
   function handleSearchInput(val: string) {
     setSearchInput(val);
     clearTimeout(searchTimer.current);
@@ -95,6 +116,16 @@ export default function AdminProductsPage() {
       setPage(1);
       setSearch(val);
     }, 350);
+  }
+
+  function handleSort(field: SortField) {
+    if (sortBy === field) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir(field === "price" ? "asc" : "asc");
+    }
+    setPage(1);
   }
 
   async function handleToggleActive(id: string, field: "is_active", value: boolean) {
@@ -122,10 +153,8 @@ export default function AdminProductsPage() {
 
   async function handleStockToggle(product: ProductWithCategory, newVal: boolean) {
     if (newVal) {
-      // Enabling in_stock — ask for quantity first
       setStockModal(product);
     } else {
-      // Disabling in_stock — no confirmation needed
       setToggling(product.id + "in_stock");
       await fetch(`/api/admin/products/${product.id}`, {
         method: "PUT",
@@ -136,6 +165,18 @@ export default function AdminProductsPage() {
       setToggling(null);
     }
   }
+
+  const SortableHeader = ({ field, label, className }: { field: SortField; label: string; className?: string }) => (
+    <th
+      className={`px-4 py-3 text-xs font-mono text-[#525252] uppercase tracking-wider whitespace-nowrap cursor-pointer select-none group ${className ?? "text-left"}`}
+      onClick={() => handleSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        {label}
+        <SortIcon field={field} sortBy={sortBy} sortDir={sortDir} />
+      </div>
+    </th>
+  );
 
   return (
     <div className="space-y-5">
@@ -157,20 +198,32 @@ export default function AdminProductsPage() {
         </Link>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525252]" />
-        <input
-          value={searchInput}
-          onChange={(e) => handleSearchInput(e.target.value)}
-          placeholder="Search products…"
-          className="w-full bg-[#161616] border border-[#262626] rounded-lg pl-9 pr-9 py-2.5 text-sm text-[#F5F5F5] placeholder:text-[#525252] focus:outline-none focus:border-[#F97316]"
-        />
-        {searchInput && (
-          <button onClick={() => { setSearchInput(""); setSearch(""); setPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#525252] hover:text-[#A3A3A3]">
-            <X className="w-4 h-4" />
-          </button>
-        )}
+      {/* Search + rows per page */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525252]" />
+          <input
+            value={searchInput}
+            onChange={(e) => handleSearchInput(e.target.value)}
+            placeholder="Search products…"
+            className="w-full bg-[#161616] border border-[#262626] rounded-lg pl-9 pr-9 py-2.5 text-sm text-[#F5F5F5] placeholder:text-[#525252] focus:outline-none focus:border-[#F97316]"
+          />
+          {searchInput && (
+            <button onClick={() => { setSearchInput(""); setSearch(""); setPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#525252] hover:text-[#A3A3A3]">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 text-sm text-[#525252]">
+          <span>Rows per page:</span>
+          <select
+            value={pageSize}
+            onChange={(e) => { setPageSize(Number(e.target.value) as typeof PAGE_SIZES[number]); setPage(1); }}
+            className="bg-[#161616] border border-[#262626] rounded-lg px-2 py-1.5 text-sm text-[#F5F5F5] focus:outline-none focus:border-[#F97316]"
+          >
+            {PAGE_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* Table */}
@@ -199,9 +252,13 @@ export default function AdminProductsPage() {
           <table className="w-full text-sm min-w-[900px]">
             <thead>
               <tr className="border-b border-[#262626] bg-[#111111]">
-                {["Product", "Category", "Price", "In Stock", "Active", "Interests", "Actions"].map(h => (
-                  <th key={h} className={`px-4 py-3 text-xs font-mono text-[#525252] uppercase tracking-wider ${h === "Price" || h === "Interests" || h === "Actions" ? "text-right" : "text-left"} ${h === "In Stock" || h === "Active" ? "text-center" : ""}`}>{h}</th>
-                ))}
+                <SortableHeader field="name" label="Product" />
+                <th className="px-4 py-3 text-left text-xs font-mono text-[#525252] uppercase tracking-wider whitespace-nowrap">Category</th>
+                <SortableHeader field="price" label="Price" className="text-right" />
+                <th className="px-4 py-3 text-center text-xs font-mono text-[#525252] uppercase tracking-wider">In Stock</th>
+                <th className="px-4 py-3 text-center text-xs font-mono text-[#525252] uppercase tracking-wider">Active</th>
+                <th className="px-4 py-3 text-right text-xs font-mono text-[#525252] uppercase tracking-wider">Interests</th>
+                <th className="px-4 py-3 text-right text-xs font-mono text-[#525252] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -259,23 +316,25 @@ export default function AdminProductsPage() {
       )}
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {totalPages > 0 && (
         <div className="flex items-center justify-between pt-2">
           <p className="text-xs text-[#525252]">
-            Page {page} of {totalPages} · {total} products
+            {total === 0 ? "No products" : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total} products`}
           </p>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</Button>
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              const n = Math.max(1, Math.min(page - 2, totalPages - 4)) + i;
-              return n <= totalPages ? (
-                <button key={n} onClick={() => setPage(n)}
-                  className={`w-8 h-8 rounded text-sm font-mono transition-colors ${n === page ? "bg-[#F97316] text-white" : "text-[#A3A3A3] hover:bg-[#1E1E1E]"}`}
-                >{n}</button>
-              ) : null;
-            })}
-            <Button variant="ghost" size="sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</Button>
-          </div>
+          {totalPages > 1 && (
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</Button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const n = Math.max(1, Math.min(page - 2, totalPages - 4)) + i;
+                return n <= totalPages ? (
+                  <button key={n} onClick={() => setPage(n)}
+                    className={`w-8 h-8 rounded text-sm font-mono transition-colors ${n === page ? "bg-[#F97316] text-white" : "text-[#A3A3A3] hover:bg-[#1E1E1E]"}`}
+                  >{n}</button>
+                ) : null;
+              })}
+              <Button variant="ghost" size="sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</Button>
+            </div>
+          )}
         </div>
       )}
     </div>

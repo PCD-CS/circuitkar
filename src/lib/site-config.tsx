@@ -6,11 +6,13 @@ import type { LaunchMode } from "@/types";
 export interface SiteConfig {
   launchMode: LaunchMode;
   freeShippingThreshold: number;
+  shippingCharge: number;
 }
 
 const SiteConfigContext = createContext<SiteConfig>({
   launchMode: "prelaunch",
   freeShippingThreshold: 499,
+  shippingCharge: 100,
 });
 
 export function SiteConfigProvider({

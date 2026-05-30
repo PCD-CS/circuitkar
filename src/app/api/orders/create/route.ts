@@ -50,11 +50,27 @@ export async function POST(request: NextRequest) {
 
   const { data: cartItems } = await supabase
     .from("cart_items")
-    .select("quantity, product:products(id, name, price, images)")
+    .select("quantity, product:products(id, name, price, images, in_stock, stock_count)")
     .eq("cart_id", cart.id);
 
   if (!cartItems || cartItems.length === 0) {
     return NextResponse.json({ error: "Cart is empty." }, { status: 400 });
+  }
+
+  // Validate stock before accepting order
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const item of cartItems as any[]) {
+    const p = item.product;
+    if (!p) continue;
+    if (!p.in_stock) {
+      return NextResponse.json({ error: `"${p.name}" is out of stock.` }, { status: 400 });
+    }
+    if (p.stock_count > 0 && item.quantity > p.stock_count) {
+      return NextResponse.json(
+        { error: `Only ${p.stock_count} unit(s) of "${p.name}" available. Please update your cart.` },
+        { status: 400 },
+      );
+    }
   }
 
   // Fetch address

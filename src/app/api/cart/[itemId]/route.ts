@@ -24,7 +24,6 @@ export async function PUT(
   } catch {
     return NextResponse.json({ error: "Invalid body." }, { status: 400 });
   }
-  const quantity = Math.max(1, Math.min(99, body.quantity ?? 1));
 
   const cartId = await resolveCartId(request);
   if (!cartId) {
@@ -32,6 +31,20 @@ export async function PUT(
   }
 
   const supabase = createAdminClient();
+
+  // Fetch product stock for this cart item
+  const { data: cartItem } = await supabase
+    .from("cart_items")
+    .select("product_id, product:products(in_stock, stock_count)")
+    .eq("id", itemId)
+    .eq("cart_id", cartId)
+    .maybeSingle();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const prod = cartItem?.product as any;
+  const maxQty = prod?.in_stock && prod.stock_count > 0 ? prod.stock_count : 99;
+  const quantity = Math.max(1, Math.min(maxQty, body.quantity ?? 1));
+
   const { error } = await supabase
     .from("cart_items")
     .update({ quantity })

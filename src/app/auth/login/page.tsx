@@ -10,6 +10,11 @@ import { Tabs } from "@/components/ui/Tabs";
 import { OTPInput } from "@/components/ui/OTPInput";
 
 function humaniseError(msg: string, email: string): { text: string; action?: { label: string; href: string } } {
+  if (msg.includes("otp_expired") || msg.includes("Token has expired") || msg.includes("expired")) {
+    return {
+      text: "OTP has expired — codes are valid for 60 seconds. Request a new one.",
+    };
+  }
   if (msg.includes("otp_disabled") || msg.includes("Email logins are disabled")) {
     return {
       text: "Email OTP is not enabled on this project yet.",
@@ -44,6 +49,8 @@ function LoginInner() {
   const [error, setError] = useState("");
   const [errorAction, setErrorAction] = useState<{ label: string; href: string } | undefined>();
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendCountdown, setResendCountdown] = useState(0);
 
   function setErr(msg: string, emailVal = email) {
     const { text, action } = humaniseError(msg, emailVal);
@@ -75,34 +82,50 @@ function LoginInner() {
     router.refresh();
   }
 
-  async function handleSendOtp(e: React.FormEvent) {
-    e.preventDefault();
-    setError(""); setErrorAction(undefined); setLoading(true);
+  async function sendOtp(): Promise<boolean> {
     const supabase = createClient();
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email,
       options: { shouldCreateUser: false },
     });
     if (otpError) {
-      // If OTP is disabled in Supabase, offer to switch to password tab
       if (otpError.message.includes("otp_disabled") || otpError.message.includes("disabled")) {
         setError("Email OTP is not enabled. Please use password login.");
         setErrorAction({ label: "Switch to password →", href: "#password" });
-        setLoading(false);
-        return;
+        return false;
       }
-      // If user doesn't exist, send them to signup with email pre-filled
-      if (
-        otpError.message.includes("not found") ||
-        otpError.message.includes("user_not_found") ||
-        otpError.message.includes("signup")
-      ) {
+      if (otpError.message.includes("not found") || otpError.message.includes("user_not_found") || otpError.message.includes("signup")) {
         router.push(`/auth/signup?email=${encodeURIComponent(email)}`);
-        return;
+        return false;
       }
-      setErr(otpError.message); setLoading(false); return;
+      setErr(otpError.message);
+      return false;
     }
-    setOtpSent(true); setLoading(false);
+    return true;
+  }
+
+  async function handleSendOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setError(""); setErrorAction(undefined); setLoading(true);
+    const ok = await sendOtp();
+    if (ok) {
+      setOtpSent(true);
+      setResendCountdown(30);
+      const timer = setInterval(() => {
+        setResendCountdown(c => { if (c <= 1) { clearInterval(timer); return 0; } return c - 1; });
+      }, 1000);
+    }
+    setLoading(false);
+  }
+
+  async function handleResendOtp() {
+    setResendLoading(true); setError(""); setErrorAction(undefined); setOtp("");
+    await sendOtp();
+    setResendCountdown(30);
+    const timer = setInterval(() => {
+      setResendCountdown(c => { if (c <= 1) { clearInterval(timer); return 0; } return c - 1; });
+    }, 1000);
+    setResendLoading(false);
   }
 
   async function handleVerifyOtp(e: React.FormEvent) {
@@ -191,19 +214,30 @@ function LoginInner() {
             <p className="text-sm text-[#A3A3A3]">
               Enter the 6-digit code sent to <span className="text-[#F5F5F5]">{email}</span>
             </p>
+            <p className="text-xs text-[#525252]">Code is valid for 60 seconds.</p>
             <div className="flex justify-center">
               <OTPInput value={otp} onChange={setOtp} />
             </div>
             <Button type="submit" loading={loading} disabled={otp.length < 6} className="w-full">
               Verify &amp; Sign In
             </Button>
-            <button
-              type="button"
-              onClick={() => { setOtpSent(false); setOtp(""); setError(""); setErrorAction(undefined); }}
-              className="w-full text-center text-xs text-[#A3A3A3] hover:text-[#F5F5F5]"
-            >
-              Use a different email
-            </button>
+            <div className="flex items-center justify-between text-xs">
+              <button
+                type="button"
+                onClick={() => { setOtpSent(false); setOtp(""); setError(""); setErrorAction(undefined); }}
+                className="text-[#A3A3A3] hover:text-[#F5F5F5]"
+              >
+                ← Different email
+              </button>
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={resendCountdown > 0 || resendLoading}
+                className="text-[#F97316] hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {resendLoading ? "Sending…" : resendCountdown > 0 ? `Resend in ${resendCountdown}s` : "Resend code"}
+              </button>
+            </div>
           </form>
         )}
       </div>

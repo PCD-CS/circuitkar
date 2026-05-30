@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { CartItemWithProduct } from "@/types";
 
 const CART_PRODUCT_SELECT =
-  "id, product_id, quantity, product:products(id, name, slug, price, compare_price, images, in_stock)";
+  "id, product_id, quantity, product:products(id, name, slug, price, compare_price, images, in_stock, stock_count)";
 
 /** Resolve the current customer id from the Supabase session, if any. */
 export async function getCurrentUserId(): Promise<string | null> {

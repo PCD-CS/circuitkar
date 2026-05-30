@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
 
   const settings = await getSettings();
   const freeShippingThreshold = parseInt(settings.free_shipping_threshold) || 499;
+  const shippingCharge = parseInt(settings.shipping_charge) || 100;
   const launchMode = settings.launch_mode || "prelaunch";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     return sum + item.product.price * item.quantity;
   }, 0);
 
-  const shipping = subtotal >= freeShippingThreshold ? 0 : 60;
+  const shipping = subtotal >= freeShippingThreshold ? 0 : shippingCharge;
   const gst = Math.round(subtotal * GST_RATE * 100) / 100;
   const total = subtotal + shipping + gst;
 

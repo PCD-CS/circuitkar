@@ -8,14 +8,17 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
-  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "20")));
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "25")));
   const search = searchParams.get("search")?.trim() ?? "";
+  const sortByRaw = searchParams.get("sortBy") ?? "created_at";
+  const sortDir = searchParams.get("sortDir") === "asc";
+  const sortBy = ["name", "price", "created_at"].includes(sortByRaw) ? sortByRaw : "created_at";
 
   const supabase = createAdminClient();
   let query = supabase
     .from("products")
     .select("*, category:categories(*)", { count: "exact" })
-    .order("created_at", { ascending: false })
+    .order(sortBy, { ascending: sortDir })
     .range((page - 1) * pageSize, page * pageSize - 1);
 
   if (search) {

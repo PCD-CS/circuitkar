@@ -93,6 +93,8 @@ export default async function RootLayout({
                 launchMode: (settings!.launch_mode as LaunchMode) || "prelaunch",
                 freeShippingThreshold:
                   parseInt(settings!.free_shipping_threshold) || 0,
+                shippingCharge:
+                  parseInt(settings!.shipping_charge) || 100,
               }}
             >
               <MaintenanceOverlay

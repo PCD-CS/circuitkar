@@ -43,6 +43,16 @@ export async function POST(request: NextRequest) {
   }
 
   const supabase = createAdminClient();
+
+  // Fetch product to check stock
+  const { data: product } = await supabase
+    .from("products")
+    .select("in_stock, stock_count")
+    .eq("id", body.productId)
+    .maybeSingle();
+
+  const maxQty = product?.in_stock && product.stock_count > 0 ? product.stock_count : 99;
+
   const { data: existing } = await supabase
     .from("cart_items")
     .select("id, quantity")
@@ -51,7 +61,10 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (existing) {
-    const newQty = Math.min(99, existing.quantity + quantity);
+    const newQty = Math.min(maxQty, existing.quantity + quantity);
+    if (newQty <= existing.quantity) {
+      return NextResponse.json({ error: `Only ${maxQty} units available.` }, { status: 400 });
+    }
     const { error } = await supabase
       .from("cart_items")
       .update({ quantity: newQty })
@@ -60,10 +73,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
   } else {
+    const clampedQty = Math.min(maxQty, quantity);
     const { error } = await supabase.from("cart_items").insert({
       cart_id: cartId,
       product_id: body.productId,
-      quantity,
+      quantity: clampedQty,
     });
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });

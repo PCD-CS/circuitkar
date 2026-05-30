@@ -14,7 +14,7 @@ import { formatPrice } from "@/lib/utils";
 
 export function CartDrawer() {
   const { items, subtotal, isOpen, closeCart } = useCart();
-  const { launchMode, freeShippingThreshold } = useSiteConfig();
+  const { launchMode, freeShippingThreshold, shippingCharge } = useSiteConfig();
   const router = useRouter();
   const isLive = launchMode === "live";
 
@@ -100,6 +100,7 @@ export function CartDrawer() {
               <CartSummary
                 subtotal={subtotal}
                 freeShippingThreshold={freeShippingThreshold}
+                shippingCharge={shippingCharge}
               />
               <div className="flex flex-col gap-2">
                 {isLive ? (

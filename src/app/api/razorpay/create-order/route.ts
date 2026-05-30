@@ -30,24 +30,37 @@ export async function POST(request: NextRequest) {
 
   const s: Record<string, string> = {};
   for (const row of settingsRows ?? []) {
-    if (row.value) s[row.key] = row.value;
+    if (row.value && row.value.trim()) s[row.key] = row.value.trim();
   }
 
   const useLive = s.razorpay_use_live === "true";
+
+  // Pick keys — test keys fall back to env vars
   const keyId = useLive
-    ? (s.razorpay_key_id_live || process.env.RAZORPAY_KEY_ID || "")
+    ? (s.razorpay_key_id_live || "")
     : (s.razorpay_key_id_test || process.env.RAZORPAY_KEY_ID || "");
+
   const keySecret = useLive
-    ? (s.razorpay_key_secret_live || process.env.RAZORPAY_KEY_SECRET || "")
+    ? (s.razorpay_key_secret_live || "")
     : (s.razorpay_key_secret_test || process.env.RAZORPAY_KEY_SECRET || "");
 
   if (!keyId || !keySecret) {
-    return NextResponse.json({ error: "Razorpay not configured." }, { status: 503 });
+    const mode = useLive ? "live" : "test";
+    const hint = useLive
+      ? "Add your live Razorpay keys in Admin → Settings → Payments tab."
+      : "Add your test Razorpay keys in Admin → Settings → Payments tab, then save.";
+    return NextResponse.json(
+      {
+        error: `Razorpay ${mode} keys not configured. ${hint}`,
+        debug: { useLive, hasKeyId: !!keyId, hasSecret: !!keySecret },
+      },
+      { status: 503 },
+    );
   }
 
   try {
     const order = await createRazorpayOrder(
-      Math.round(body.amount * 100), // convert to paise
+      Math.round(body.amount * 100),
       "INR",
       body.receipt,
       keyId,
@@ -56,7 +69,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ orderId: order.id, keyId, amount: order.amount });
   } catch (err) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to create order." },
+      { error: err instanceof Error ? err.message : "Razorpay order creation failed." },
       { status: 500 },
     );
   }

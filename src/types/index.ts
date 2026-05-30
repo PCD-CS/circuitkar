@@ -199,7 +199,7 @@ export interface CartItemWithProduct {
   quantity: number;
   product: Pick<
     Product,
-    "id" | "name" | "slug" | "price" | "compare_price" | "images" | "in_stock"
+    "id" | "name" | "slug" | "price" | "compare_price" | "images" | "in_stock" | "stock_count"
   >;
 }
 

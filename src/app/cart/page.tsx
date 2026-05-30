@@ -12,7 +12,7 @@ import { useSiteConfig } from "@/lib/site-config";
 
 export default function CartPage() {
   const { items, subtotal, isLoading } = useCart();
-  const { launchMode, freeShippingThreshold } = useSiteConfig();
+  const { launchMode, freeShippingThreshold, shippingCharge } = useSiteConfig();
   const router = useRouter();
   const isLive = launchMode === "live";
 
@@ -65,6 +65,7 @@ export default function CartPage() {
             <CartSummary
               subtotal={subtotal}
               freeShippingThreshold={freeShippingThreshold}
+              shippingCharge={shippingCharge}
             />
 
             <form
