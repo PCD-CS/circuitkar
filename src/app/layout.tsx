@@ -42,19 +42,35 @@ export const metadata: Metadata = {
     template: "%s | Circuitkar",
   },
   description:
-    "Quality electronic components. Fast shipping across India. Trusted by makers, engineers & students.",
+    "Buy genuine electronic components online in India — microcontrollers, sensors, development boards, resistors, capacitors and more. Fast shipping. GST invoices. Trusted by makers, engineers & students.",
+  keywords: [
+    "electronic components India", "buy electronics online India", "microcontroller",
+    "Arduino", "ESP32", "Raspberry Pi", "sensors", "development boards",
+    "electronic parts", "maker supplies India", "resistors", "capacitors",
+    "LED", "transistors", "CircuitKar",
+  ],
   openGraph: {
     type: "website",
     siteName: "Circuitkar",
     title: "Circuitkar — Electronic Components for Indian Makers",
     description:
-      "Quality electronic components. Fast shipping across India. Trusted by makers, engineers & students.",
+      "Buy genuine electronic components online in India. Fast shipping. GST invoices. Trusted by makers, engineers & students.",
     url: siteUrl,
   },
   twitter: {
     card: "summary_large_image",
     title: "Circuitkar — Electronic Components for Indian Makers",
-    description: "Quality electronic components. Fast shipping across India.",
+    description: "Buy genuine electronic components online in India. Fast shipping. GST invoices.",
+  },
+  alternates: {
+    types: {
+      "text/plain": `${siteUrl}/llms.txt`,
+    },
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
   },
 };
 

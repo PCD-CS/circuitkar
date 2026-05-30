@@ -1,14 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCustomerId } from "@/lib/auth";
+import { getSettings } from "@/lib/settings";
 import { getResendClient, getEmailConfig } from "@/lib/resend";
 import { OrderConfirmationEmail } from "@/lib/emails/order-confirmation";
-import type { OrderItem, ShippingAddress } from "@/types";
+import type { OrderItem, ShippingAddress, StatusHistoryEntry } from "@/types";
 
-function generateOrderNumber(): string {
-  const ts = Date.now().toString(36).toUpperCase();
-  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return `CK-${ts}-${rand}`;
+/** Generate order number: {PREFIX}-DDMMYY-NNNN */
+async function generateOrderNumber(supabase: ReturnType<typeof import("@supabase/supabase-js").createClient>, prefix: string): Promise<{ orderNumber: string; dailySeq: number }> {
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, "0");
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const yy = String(now.getFullYear()).slice(-2);
+  const dateStr = `${dd}${mm}${yy}`;
+
+  // Count today's orders to get the daily sequence
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const { count } = await supabase
+    .from("orders")
+    .select("*", { count: "exact", head: true })
+    .gte("created_at", todayStart);
+
+  const dailySeq = (count ?? 0) + 1;
+  const orderNumber = `${prefix}-${dateStr}-${String(dailySeq).padStart(4, "0")}`;
+  return { orderNumber, dailySeq };
 }
 
 export async function POST(request: NextRequest) {
@@ -23,6 +38,7 @@ export async function POST(request: NextRequest) {
     businessName?: string;
     razorpayOrderId?: string;
     razorpayPaymentId?: string;
+    isTestOrder?: boolean;
     subtotal: number;
     shipping: number;
     gst: number;
@@ -37,7 +53,7 @@ export async function POST(request: NextRequest) {
 
   const supabase = createAdminClient();
 
-  // Fetch cart items
+  // Fetch cart items with stock info
   const { data: cart } = await supabase
     .from("carts")
     .select("id")
@@ -57,7 +73,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Cart is empty." }, { status: 400 });
   }
 
-  // Validate stock before accepting order
+  // Final stock validation before order creation
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const item of cartItems as any[]) {
     const p = item.product;
@@ -85,18 +101,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Address not found." }, { status: 400 });
   }
 
-  // Fetch customer email
+  // Fetch customer info
   const { data: { user } } = await supabase.auth.admin.getUserById(customerId);
   const customerEmail = user?.email || "";
-
   const { data: profile } = await supabase
     .from("customer_profiles")
     .select("full_name, phone")
     .eq("id", customerId)
     .maybeSingle();
 
+  const settings = await getSettings();
+  const prefix = settings.order_number_prefix || "CK";
+
+  const { orderNumber, dailySeq } = await generateOrderNumber(supabase as unknown as ReturnType<typeof import("@supabase/supabase-js").createClient>, prefix);
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const orderItems = cartItems.map((item: any) => ({
+  const orderItems = (cartItems as any[]).map((item) => ({
     product_id: item.product.id,
     name: item.product.name,
     qty: item.quantity,
@@ -104,12 +124,15 @@ export async function POST(request: NextRequest) {
     image: item.product.images?.[0] || null,
   }));
 
-  const orderNumber = generateOrderNumber();
+  const initialHistory: StatusHistoryEntry[] = [
+    { status: "confirmed", timestamp: new Date().toISOString(), note: "Order placed" },
+  ];
 
   const { data: order, error } = await supabase
     .from("orders")
     .insert({
       order_number: orderNumber,
+      daily_sequence: dailySeq,
       customer_id: customerId,
       customer_name: profile?.full_name || address.full_name,
       customer_email: customerEmail,
@@ -136,6 +159,8 @@ export async function POST(request: NextRequest) {
       payment_status: "paid",
       razorpay_order_id: body.razorpayOrderId || null,
       razorpay_payment_id: body.razorpayPaymentId || null,
+      is_test_order: body.isTestOrder ?? false,
+      status_history: initialHistory,
     })
     .select("*")
     .single();
@@ -144,17 +169,41 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Decrement stock for each purchased product
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const item of cartItems as any[]) {
+    const p = item.product;
+    if (!p || !p.in_stock) continue;
+    const newStock = Math.max(0, (p.stock_count ?? 0) - item.quantity);
+    await supabase
+      .from("products")
+      .update({
+        stock_count: newStock,
+        in_stock: newStock > 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", p.id);
+
+    // Log inventory event
+    await supabase.from("inventory_events").insert({
+      product_id: p.id,
+      event_type: "sale",
+      quantity_change: -item.quantity,
+      reference_id: orderNumber,
+      notes: `Sold via order ${orderNumber}`,
+    }).then(() => {}); // fire-and-forget
+  }
+
   // Clear the cart
   await supabase.from("cart_items").delete().eq("cart_id", cart.id);
 
-  // Send order confirmation email (best-effort, never blocks the response)
+  // Send order confirmation email
   try {
     const emailConfig = await getEmailConfig();
     if (emailConfig.sendOrderEmails && customerEmail) {
       const resend = await getResendClient();
       if (resend) {
-        const siteUrl =
-          process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in";
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in";
         const addr = order.shipping_address as ShippingAddress;
         await resend.emails.send({
           from: emailConfig.from,
@@ -171,6 +220,15 @@ export async function POST(request: NextRequest) {
             siteUrl,
           }),
         });
+        // Notify admin
+        if (emailConfig.storeEmail) {
+          await resend.emails.send({
+            from: emailConfig.from,
+            to: emailConfig.storeEmail,
+            subject: `New order ${orderNumber}${body.isTestOrder ? " [TEST]" : ""} — ₹${body.total.toLocaleString("en-IN")}`,
+            html: `<p>New order <strong>${orderNumber}</strong> received${body.isTestOrder ? " <em>(test mode)</em>" : ""}.</p><p>Customer: ${order.customer_name} (${customerEmail})</p><p>Total: ₹${body.total.toLocaleString("en-IN")}</p><p><a href="${siteUrl}/admin/orders/${orderNumber}">View in admin →</a></p>`,
+          });
+        }
       }
     }
   } catch (err) {

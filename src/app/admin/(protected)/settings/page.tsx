@@ -19,6 +19,8 @@ interface AllSettings {
   whatsapp_number: string;
   free_shipping_threshold: string;
   shipping_charge: string;
+  order_number_prefix: string;
+  low_stock_threshold: string;
   admin_email: string;
   // Payments
   razorpay_key_id_test: string;
@@ -46,7 +48,7 @@ interface AllSettings {
 
 const DEFAULTS: AllSettings = {
   launch_mode: "prelaunch", maintenance_message: "", announcement_text: "", announcement_enabled: "true",
-  site_name: "Circuitkar", store_email: "", whatsapp_number: "", free_shipping_threshold: "499", shipping_charge: "100", admin_email: "",
+  site_name: "Circuitkar", store_email: "", whatsapp_number: "", free_shipping_threshold: "499", shipping_charge: "100", order_number_prefix: "CK", low_stock_threshold: "5", admin_email: "",
   razorpay_key_id_test: "", razorpay_key_secret_test: "", razorpay_key_id_live: "", razorpay_key_secret_live: "", razorpay_use_live: "false",
   shiprocket_email: "", shiprocket_password: "", shiprocket_pickup_location: "Primary", shiprocket_auto_create: "false",
   resend_api_key: "", resend_from_email: "orders@circuitkar.in", resend_from_name: "Circuitkar", send_order_emails: "true", send_notifyme_emails: "true",
@@ -91,7 +93,7 @@ export default function SettingsPage() {
 
   function isDirty(tab: string): boolean {
     const keys: Record<string, (keyof AllSettings)[]> = {
-      store: ["launch_mode", "maintenance_message", "announcement_text", "announcement_enabled", "site_name", "store_email", "whatsapp_number", "free_shipping_threshold", "shipping_charge", "admin_email"],
+      store: ["launch_mode", "maintenance_message", "announcement_text", "announcement_enabled", "site_name", "store_email", "whatsapp_number", "free_shipping_threshold", "shipping_charge", "order_number_prefix", "low_stock_threshold", "admin_email"],
       payments: ["razorpay_key_id_test", "razorpay_key_secret_test", "razorpay_key_id_live", "razorpay_key_secret_live", "razorpay_use_live"],
       shipping: ["shiprocket_email", "shiprocket_password", "shiprocket_pickup_location", "shiprocket_auto_create"],
       email: ["resend_api_key", "resend_from_email", "resend_from_name", "send_order_emails", "send_notifyme_emails"],
@@ -247,6 +249,13 @@ export default function SettingsPage() {
             <div className="grid grid-cols-2 gap-4">
               <Input label="Free Shipping Threshold (₹)" type="number" value={settings.free_shipping_threshold} onChange={e => set("free_shipping_threshold", e.target.value)} />
               <Input label="Flat Shipping Charge (₹)" type="number" value={settings.shipping_charge} onChange={e => set("shipping_charge", e.target.value)} placeholder="100" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Input label="Order Number Prefix" value={settings.order_number_prefix} onChange={e => set("order_number_prefix", e.target.value.toUpperCase())} placeholder="CK" />
+                <p className="text-xs text-[#525252] mt-1">Format: {settings.order_number_prefix || "CK"}-DDMMYY-0001</p>
+              </div>
+              <Input label="Low Stock Alert Threshold" type="number" value={settings.low_stock_threshold} onChange={e => set("low_stock_threshold", e.target.value)} placeholder="5" />
             </div>
             <div className="border border-[#262626] rounded-lg p-4">
               <p className="text-xs font-mono text-[#525252] uppercase tracking-wider mb-3">Announcement Bar</p>

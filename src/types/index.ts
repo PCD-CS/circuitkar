@@ -56,12 +56,15 @@ export interface ProductInterestWithProduct extends ProductInterest {
 }
 
 export interface ShippingAddress {
+  full_name?: string;
+  phone?: string;
+  label?: string;
   line1: string;
   line2?: string;
   city: string;
   state: string;
   pincode: string;
-  country: string;
+  country?: string;
 }
 
 export interface OrderItem {
@@ -74,9 +77,17 @@ export interface OrderItem {
 export type OrderStatus =
   | "pending"
   | "confirmed"
+  | "accepted"
+  | "packed"
   | "shipped"
   | "delivered"
   | "cancelled";
+
+export interface StatusHistoryEntry {
+  status: OrderStatus;
+  timestamp: string;
+  note?: string;
+}
 
 export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
 
@@ -102,6 +113,18 @@ export interface Order {
   address_id: string | null;
   gstin: string | null;
   business_name: string | null;
+  // Phase 3 fields
+  is_test_order: boolean | null;
+  courier_name: string | null;
+  tracking_number: string | null;
+  tracking_url: string | null;
+  status_history: StatusHistoryEntry[] | null;
+  daily_sequence: number | null;
+  accepted_at: string | null;
+  packed_at: string | null;
+  shipped_at: string | null;
+  delivered_at: string | null;
+  cancelled_at: string | null;
   created_at: string;
   updated_at: string;
 }

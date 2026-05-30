@@ -2,24 +2,21 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { ShoppingCart, Search, X, Eye, ChevronLeft, ChevronRight } from "lucide-react";
-import { Input } from "@/components/ui/Input";
+import { ShoppingCart, Search, X, Eye, ChevronLeft, ChevronRight, Download, TestTube2 } from "lucide-react";
 import type { Order, OrderStatus } from "@/types";
 
-const STATUSES: OrderStatus[] = [
-  "pending",
-  "confirmed",
-  "shipped",
-  "delivered",
-  "cancelled",
+const ALL_STATUSES: OrderStatus[] = [
+  "pending", "confirmed", "accepted", "packed", "shipped", "delivered", "cancelled",
 ];
 
 const STATUS_STYLE: Record<string, string> = {
-  pending: "bg-[#F59E0B20] text-[#F59E0B] border-[#F59E0B]/40",
-  confirmed: "bg-[#22C55E20] text-[#22C55E] border-[#22C55E]/40",
-  shipped: "bg-[#F9731620] text-[#F97316] border-[#F97316]/40",
-  delivered: "bg-[#22C55E20] text-[#22C55E] border-[#22C55E]/40",
-  cancelled: "bg-[#EF444420] text-[#EF4444] border-[#EF4444]/40",
+  pending:   "bg-[#F59E0B]/10 text-[#F59E0B]  border-[#F59E0B]/40",
+  confirmed: "bg-[#3B82F6]/10 text-[#3B82F6]  border-[#3B82F6]/40",
+  accepted:  "bg-[#8B5CF6]/10 text-[#8B5CF6]  border-[#8B5CF6]/40",
+  packed:    "bg-[#F97316]/10 text-[#F97316]  border-[#F97316]/40",
+  shipped:   "bg-[#06B6D4]/10 text-[#06B6D4]  border-[#06B6D4]/40",
+  delivered: "bg-[#22C55E]/10 text-[#22C55E]  border-[#22C55E]/40",
+  cancelled: "bg-[#EF4444]/10 text-[#EF4444]  border-[#EF4444]/40",
 };
 
 function inr(n: number | null) {
@@ -35,6 +32,7 @@ export default function AdminOrdersPage() {
   const [searchInput, setSearchInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   const pageSize = 20;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -47,25 +45,14 @@ export default function AdminOrdersPage() {
     try {
       const res = await fetch(`/api/admin/orders?${qs.toString()}`);
       const data = await res.json();
-      if (res.ok) {
-        setOrders(data.orders ?? []);
-        setTotal(data.total ?? 0);
-      }
-    } finally {
-      setLoading(false);
-    }
+      if (res.ok) { setOrders(data.orders ?? []); setTotal(data.total ?? 0); }
+    } finally { setLoading(false); }
   }, [page, status, search]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  // Debounced search
   useEffect(() => {
-    const t = setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(1);
-    }, 400);
+    const t = setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 400);
     return () => clearTimeout(t);
   }, [searchInput]);
 
@@ -79,23 +66,45 @@ export default function AdminOrdersPage() {
       });
       if (res.ok) {
         setOrders((prev) =>
-          prev.map((o) =>
-            o.id === order.id ? { ...o, status: newStatus as OrderStatus } : o,
-          ),
+          prev.map((o) => o.id === order.id ? { ...o, status: newStatus as OrderStatus } : o),
         );
       }
-    } finally {
-      setUpdatingId(null);
-    }
+    } finally { setUpdatingId(null); }
+  }
+
+  async function exportCsv() {
+    setExportingCsv(true);
+    try {
+      const qs = new URLSearchParams({ format: "csv" });
+      if (status) qs.set("status", status);
+      if (search) qs.set("search", search);
+      const res = await fetch(`/api/admin/invoices/export?${qs}`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `orders-${new Date().toISOString().split("T")[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally { setExportingCsv(false); }
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold font-mono text-[#F5F5F5]">Orders</h1>
-        <p className="text-sm text-[#525252] mt-1">
-          {total} order{total === 1 ? "" : "s"} total
-        </p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-xl font-bold font-mono text-[#F5F5F5]">Orders</h1>
+          <p className="text-sm text-[#525252] mt-1">{total} order{total === 1 ? "" : "s"} total</p>
+        </div>
+        <button
+          onClick={exportCsv}
+          disabled={exportingCsv}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#262626] px-3 py-2 text-xs text-[#A3A3A3] hover:border-[#F97316] hover:text-[#F97316] transition-colors disabled:opacity-50"
+        >
+          <Download className="h-3.5 w-3.5" />
+          {exportingCsv ? "Exporting…" : "Export CSV"}
+        </button>
       </div>
 
       {/* Filters */}
@@ -105,31 +114,23 @@ export default function AdminOrdersPage() {
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search by order number or email…"
+            placeholder="Search by order number, email or name…"
             className="w-full bg-[#111111] border border-[#262626] rounded-lg pl-9 pr-9 py-2.5 text-sm text-[#F5F5F5] placeholder:text-[#525252] focus:outline-none focus:border-[#F97316]"
           />
           {searchInput && (
-            <button
-              onClick={() => setSearchInput("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#525252] hover:text-[#F5F5F5]"
-            >
+            <button onClick={() => setSearchInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#525252] hover:text-[#F5F5F5]">
               <X className="h-4 w-4" />
             </button>
           )}
         </div>
         <select
           value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
-            setPage(1);
-          }}
+          onChange={(e) => { setStatus(e.target.value); setPage(1); }}
           className="bg-[#111111] border border-[#262626] rounded-lg px-3 py-2.5 text-sm text-[#F5F5F5] focus:outline-none focus:border-[#F97316]"
         >
           <option value="">All statuses</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
+          {ALL_STATUSES.map((s) => (
+            <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
           ))}
         </select>
       </div>
@@ -159,33 +160,33 @@ export default function AdminOrdersPage() {
                   <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#262626]">
+              <tbody className="divide-y divide-[#1A1A1A]">
                 {orders.map((o) => (
-                  <tr key={o.id} className="hover:bg-[#1A1A1A]">
-                    <td className="px-4 py-3 font-mono text-[#F5F5F5]">
-                      {o.order_number}
+                  <tr key={o.id} className="hover:bg-[#1A1A1A] transition-colors">
+                    <td className="px-4 py-3">
+                      <p className="font-mono text-[#F5F5F5] text-xs">{o.order_number}</p>
+                      {o.is_test_order && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] text-[#F59E0B] font-mono mt-0.5">
+                          <TestTube2 className="h-2.5 w-2.5" /> TEST
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-[#F5F5F5]">{o.customer_name}</p>
                       <p className="text-xs text-[#525252]">{o.customer_email}</p>
                     </td>
-                    <td className="px-4 py-3 text-[#A3A3A3] whitespace-nowrap">
-                      {new Date(o.created_at).toLocaleDateString("en-IN")}
+                    <td className="px-4 py-3 text-[#A3A3A3] whitespace-nowrap text-xs">
+                      {new Date(o.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                     </td>
                     <td className="px-4 py-3 text-[#A3A3A3]">
                       {(o.items ?? []).reduce((n, it) => n + (it.qty || 0), 0)}
                     </td>
-                    <td className="px-4 py-3 text-[#F97316] font-medium">
+                    <td className="px-4 py-3 text-[#F97316] font-medium font-mono">
                       {inr(o.total)}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-block rounded-md border px-2 py-0.5 text-xs ${
-                          STATUS_STYLE[o.status] ??
-                          "bg-[#262626] text-[#A3A3A3] border-[#262626]"
-                        }`}
-                      >
-                        {o.status}
+                      <span className={`inline-block rounded-md border px-2 py-0.5 text-xs ${STATUS_STYLE[o.status] ?? "bg-[#262626] text-[#A3A3A3] border-[#262626]"}`}>
+                        {o.status.charAt(0).toUpperCase() + o.status.slice(1)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -196,15 +197,13 @@ export default function AdminOrdersPage() {
                           onChange={(e) => updateStatus(o, e.target.value)}
                           className="bg-[#111111] border border-[#262626] rounded-md px-2 py-1.5 text-xs text-[#F5F5F5] focus:outline-none focus:border-[#F97316] disabled:opacity-50"
                         >
-                          {STATUSES.map((s) => (
-                            <option key={s} value={s}>
-                              {s}
-                            </option>
+                          {ALL_STATUSES.map((s) => (
+                            <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
                           ))}
                         </select>
                         <Link
                           href={`/admin/orders/${o.order_number}`}
-                          className="inline-flex items-center gap-1 rounded-md border border-[#262626] px-2.5 py-1.5 text-xs text-[#A3A3A3] hover:border-[#F97316] hover:text-[#F97316]"
+                          className="inline-flex items-center gap-1 rounded-md border border-[#262626] px-2.5 py-1.5 text-xs text-[#A3A3A3] hover:border-[#F97316] hover:text-[#F97316] transition-colors"
                         >
                           <Eye className="h-3.5 w-3.5" /> View
                         </Link>
@@ -222,7 +221,7 @@ export default function AdminOrdersPage() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <span className="text-xs text-[#525252]">
-            Page {page} of {totalPages}
+            {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total} orders
           </span>
           <div className="flex gap-2">
             <button

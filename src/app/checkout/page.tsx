@@ -308,7 +308,7 @@ export default function CheckoutPage() {
               body: JSON.stringify(response),
             });
             if (!verifyRes.ok) { setError("Payment verification failed. Contact support."); setPlacing(false); return; }
-            await createOrder(response.razorpay_order_id, response.razorpay_payment_id, summary);
+            await createOrder(response.razorpay_order_id, response.razorpay_payment_id, rzpData.keyId, summary);
           },
           modal: { ondismiss: () => setPlacing(false) },
         });
@@ -323,7 +323,7 @@ export default function CheckoutPage() {
     }
   }
 
-  async function createOrder(rzpOrderId: string, rzpPaymentId: string, sum: CheckoutSummary) {
+  async function createOrder(rzpOrderId: string, rzpPaymentId: string, keyId: string, sum: CheckoutSummary) {
     const res = await fetch("/api/orders/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -333,6 +333,7 @@ export default function CheckoutPage() {
         businessName: wantGst && businessName ? businessName : undefined,
         razorpayOrderId: rzpOrderId,
         razorpayPaymentId: rzpPaymentId,
+        isTestOrder: keyId.startsWith("rzp_test_"),
         subtotal: sum.subtotal, shipping: sum.shipping, gst: sum.gst, total: sum.total,
       }),
     });

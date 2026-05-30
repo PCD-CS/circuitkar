@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   Settings,
   FileText,
+  Receipt,
   LogOut,
   Menu,
   X,
@@ -24,6 +25,7 @@ const navItems = [
   { href: "/admin/blog", label: "Blog", icon: FileText },
   { href: "/admin/interests", label: "Interests", icon: Bell },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
+  { href: "/admin/invoices", label: "Invoices", icon: Receipt },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 

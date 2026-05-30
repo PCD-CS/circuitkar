@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type MutableRefObject,
 } from "react";
 import { useToast } from "@/components/ui/Toast";
 import type { CartItemWithProduct } from "@/types";
@@ -18,7 +19,7 @@ interface CartContextType {
   subtotal: number;
   addItem: (productId: string, qty?: number) => Promise<void>;
   removeItem: (cartItemId: string) => Promise<void>;
-  updateQty: (cartItemId: string, qty: number) => Promise<void>;
+  updateQty: (cartItemId: string, qty: number) => void;
   clearCart: () => Promise<void>;
   refresh: () => Promise<void>;
   isLoading: boolean;
@@ -50,6 +51,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const sessionRef = useRef<string>("");
+  // Debounce timers per cart item — prevents in-flight race conditions on rapid clicks
+  const pendingRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map()) as MutableRefObject<Map<string, ReturnType<typeof setTimeout>>>;
 
   const headers = useCallback((): HeadersInit => {
     return {
@@ -96,27 +99,37 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 
   const updateQty = useCallback(
-    async (cartItemId: string, qty: number) => {
-      const prev = items;
-      // Optimistic update
+    (cartItemId: string, qty: number) => {
+      // Immediately reflect in UI — no wait
       setItems((curr) =>
         curr.map((i) => (i.id === cartItemId ? { ...i, quantity: qty } : i)),
       );
-      try {
-        const res = await fetch(`/api/cart/${cartItemId}`, {
-          method: "PUT",
-          headers: headers(),
-          body: JSON.stringify({ quantity: qty }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error);
-        setItems(data.items ?? []);
-      } catch {
-        setItems(prev);
-        toast("Could not update quantity.", "error");
-      }
+      // Cancel any pending debounced call for this item
+      const existing = pendingRef.current.get(cartItemId);
+      if (existing !== undefined) clearTimeout(existing);
+      // Debounce the actual API call — rapid clicks collapse into one request
+      pendingRef.current.set(
+        cartItemId,
+        setTimeout(async () => {
+          pendingRef.current.delete(cartItemId);
+          try {
+            const res = await fetch(`/api/cart/${cartItemId}`, {
+              method: "PUT",
+              headers: headers(),
+              body: JSON.stringify({ quantity: qty }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            setItems(data.items ?? []);
+          } catch {
+            // Sync from server on error instead of using stale prev snapshot
+            refresh();
+            toast("Could not update quantity.", "error");
+          }
+        }, 350),
+      );
     },
-    [headers, items, toast],
+    [headers, refresh, toast],
   );
 
   const removeItem = useCallback(
