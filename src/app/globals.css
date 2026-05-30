@@ -115,3 +115,92 @@ input[type="range"]::-moz-range-thumb {
     text-wrap: balance;
   }
 }
+
+/* Rich-text (Tiptap) rendered content */
+.rich-text {
+  color: #a3a3a3;
+  line-height: 1.7;
+}
+.rich-text h1,
+.rich-text h2,
+.rich-text h3,
+.rich-text h4 {
+  color: #f5f5f5;
+  font-weight: 700;
+  margin: 1.5rem 0 0.75rem;
+}
+.rich-text h1 {
+  font-size: 1.6rem;
+}
+.rich-text h2 {
+  font-size: 1.35rem;
+}
+.rich-text h3 {
+  font-size: 1.15rem;
+}
+.rich-text p {
+  color: #a3a3a3;
+  margin: 0.75rem 0;
+}
+.rich-text a {
+  color: #f97316;
+  text-decoration: underline;
+}
+.rich-text a:hover {
+  color: #ea6c0a;
+}
+.rich-text ul,
+.rich-text ol {
+  color: #a3a3a3;
+  padding-left: 1.5rem;
+  margin: 0.75rem 0;
+}
+.rich-text ul {
+  list-style: disc;
+}
+.rich-text ol {
+  list-style: decimal;
+}
+.rich-text li {
+  margin: 0.25rem 0;
+}
+.rich-text code {
+  background: #1e1e1e;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 0.85em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 8px;
+  color: #f5f5f5;
+}
+.rich-text pre {
+  background: #1e1e1e;
+  border: 1px solid #262626;
+  border-radius: 8px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+.rich-text pre code {
+  background: transparent;
+  padding: 0;
+}
+.rich-text blockquote {
+  border-left: 2px solid #f97316;
+  padding-left: 1rem;
+  font-style: italic;
+  color: #a3a3a3;
+  margin: 1rem 0;
+}
+.rich-text hr {
+  border: none;
+  border-top: 1px solid #262626;
+  margin: 1.5rem 0;
+}
+.rich-text img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+.rich-text strong {
+  color: #f5f5f5;
+}

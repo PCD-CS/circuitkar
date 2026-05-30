@@ -9,6 +9,7 @@ import {
   Bell,
   ShoppingCart,
   Settings,
+  FileText,
   LogOut,
   Menu,
   X,
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/products", label: "Products", icon: Package },
+  { href: "/admin/blog", label: "Blog", icon: FileText },
   { href: "/admin/interests", label: "Interests", icon: Bell },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
   { href: "/admin/settings", label: "Settings", icon: Settings },

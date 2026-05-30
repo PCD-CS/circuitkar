@@ -25,3 +25,19 @@ export async function requireAdmin(
   }
   return { ok: false };
 }
+
+/**
+ * Returns the authenticated customer's user id, or null. For customer-facing
+ * API routes (account, orders, checkout).
+ */
+export async function getCustomerId(): Promise<string | null> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return user?.id ?? null;
+  } catch {
+    return null;
+  }
+}

@@ -98,6 +98,10 @@ export interface Order {
   shiprocket_order_id: string | null;
   shiprocket_tracking: string | null;
   notes: string | null;
+  customer_id: string | null;
+  address_id: string | null;
+  gstin: string | null;
+  business_name: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -138,3 +142,83 @@ export type ProductSort =
   | "price-asc"
   | "price-desc"
   | "newest";
+
+// ---- Phase 2 types ----
+
+export type AccountType = "personal" | "business";
+
+export interface CustomerProfile {
+  id: string;
+  full_name: string | null;
+  phone: string | null;
+  account_type: AccountType;
+  business_name: string | null;
+  gstin: string | null;
+  pan: string | null;
+  email_notifications: boolean;
+  whatsapp_notifications: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomerAddress {
+  id: string;
+  customer_id: string;
+  label: string;
+  full_name: string;
+  phone: string;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string;
+  pincode: string;
+  country: string;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface Cart {
+  id: string;
+  customer_id: string | null;
+  session_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CartItemRow {
+  id: string;
+  cart_id: string;
+  product_id: string;
+  quantity: number;
+  added_at: string;
+}
+
+export interface CartItemWithProduct {
+  id: string;
+  product_id: string;
+  quantity: number;
+  product: Pick<
+    Product,
+    "id" | "name" | "slug" | "price" | "compare_price" | "images" | "in_stock"
+  >;
+}
+
+export interface BlogPost {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  content: string | null;
+  cover_image: string | null;
+  tags: string[] | null;
+  is_published: boolean;
+  published_at: string | null;
+  author_name: string;
+  seo_title: string | null;
+  seo_description: string | null;
+  view_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type LaunchMode = "prelaunch" | "maintenance" | "live";

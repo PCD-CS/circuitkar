@@ -10,6 +10,8 @@ const DEFAULTS: SettingsMap = {
   razorpay_live: "false",
   admin_email: "",
   whatsapp_number: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "91XXXXXXXXXX",
+  launch_mode: "prelaunch",
+  store_email: "hello@circuitkar.in",
 };
 
 /** Fetch all settings as a key->value map. Falls back to defaults. */

@@ -42,6 +42,9 @@ export async function getProducts(opts: ProductQuery = {}): Promise<{
   page: number;
   pageSize: number;
 }> {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { products: [], total: 0, page: 1, pageSize: opts.pageSize ?? 60 };
+  }
   const supabase = createAdminClient();
   const page = opts.page && opts.page > 0 ? opts.page : 1;
   const pageSize = opts.pageSize && opts.pageSize > 0 ? opts.pageSize : 60;

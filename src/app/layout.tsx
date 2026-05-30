@@ -7,7 +7,11 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { WhatsAppButton } from "@/components/layout/WhatsAppButton";
 import { ToastProvider } from "@/components/ui/Toast";
+import { CartProvider } from "@/lib/cart-context";
+import { SiteConfigProvider } from "@/lib/site-config";
+import { CartDrawer } from "@/components/cart/CartDrawer";
 import { getSettings } from "@/lib/settings";
+import type { LaunchMode } from "@/types";
 
 const spaceMono = Space_Mono({
   weight: ["400", "700"],
@@ -80,12 +84,21 @@ export default async function RootLayout({
           {isAdmin ? (
             children
           ) : (
-            <>
-              <Header />
-              <main className="min-h-[60vh]">{children}</main>
-              <Footer whatsappNumber={settings!.whatsapp_number} />
-              <WhatsAppButton number={settings!.whatsapp_number} />
-            </>
+            <SiteConfigProvider
+              value={{
+                launchMode: (settings!.launch_mode as LaunchMode) || "prelaunch",
+                freeShippingThreshold:
+                  parseInt(settings!.free_shipping_threshold) || 0,
+              }}
+            >
+              <CartProvider>
+                <Header />
+                <main className="min-h-[60vh]">{children}</main>
+                <Footer whatsappNumber={settings!.whatsapp_number} />
+                <WhatsAppButton number={settings!.whatsapp_number} />
+                <CartDrawer />
+              </CartProvider>
+            </SiteConfigProvider>
           )}
         </ToastProvider>
         {gaId && <GoogleAnalytics gaId={gaId} />}
