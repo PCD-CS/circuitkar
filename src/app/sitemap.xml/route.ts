@@ -14,19 +14,26 @@ export async function GET() {
 
   let productsData: { slug: string; updated_at: string }[] = [];
   let categoriesData: { slug: string }[] = [];
+  let blogData: { slug: string; updated_at: string }[] = [];
 
   try {
     const supabase = createAdminClient();
-    const [productsRes, categoriesRes] = await Promise.all([
+    const [productsRes, categoriesRes, blogRes] = await Promise.all([
       supabase
         .from("products")
         .select("slug, updated_at")
         .eq("is_active", true)
         .order("updated_at", { ascending: false }),
       supabase.from("categories").select("slug, created_at"),
+      supabase
+        .from("blog_posts")
+        .select("slug, updated_at")
+        .eq("is_published", true)
+        .order("updated_at", { ascending: false }),
     ]);
     productsData = productsRes.data ?? [];
     categoriesData = categoriesRes.data ?? [];
+    blogData = blogRes.data ?? [];
   } catch {
     // Supabase not configured — return static sitemap
   }
@@ -50,6 +57,10 @@ export async function GET() {
     ...productsData.map(
       (p) =>
         `  <url>\n    <loc>${xmlEscape(`${siteUrl}/products/${p.slug}`)}</loc>\n    <lastmod>${new Date(p.updated_at).toISOString().split("T")[0]}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>`
+    ),
+    ...blogData.map(
+      (b) =>
+        `  <url>\n    <loc>${xmlEscape(`${siteUrl}/blog/${b.slug}`)}</loc>\n    <lastmod>${new Date(b.updated_at).toISOString().split("T")[0]}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>`
     ),
   ];
 

@@ -1,112 +1,207 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Plus, ExternalLink, Pencil } from "lucide-react";
+import { Plus, ExternalLink, Pencil, Search, X, Package } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import type { ProductWithCategory } from "@/types";
 
-function Toggle({
-  checked,
-  onChange,
-  disabled,
+const PAGE_SIZE = 20;
+
+/* ── Quantity modal shown when enabling in_stock ── */
+function StockModal({
+  product,
+  onConfirm,
+  onCancel,
 }: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  disabled?: boolean;
+  product: ProductWithCategory;
+  onConfirm: (qty: number) => void;
+  onCancel: () => void;
 }) {
+  const [qty, setQty] = useState(product.stock_count > 0 ? product.stock_count : 1);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onCancel} />
+      <div className="relative bg-[#161616] border border-[#262626] rounded-lg p-6 w-full max-w-sm">
+        <h3 className="text-base font-semibold text-[#F5F5F5] mb-1">Set Stock Quantity</h3>
+        <p className="text-sm text-[#A3A3A3] mb-5">
+          How many units of <span className="text-[#F5F5F5]">{product.name}</span> are available?
+        </p>
+        <Input
+          label="Stock Count *"
+          type="number"
+          min={1}
+          value={qty}
+          onChange={(e) => setQty(Math.max(1, parseInt(e.target.value) || 1))}
+          autoFocus
+        />
+        <div className="flex gap-3 mt-5">
+          <Button className="flex-1" onClick={() => onConfirm(qty)}>
+            Mark In Stock ({qty} units)
+          </Button>
+          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative w-9 h-5 rounded-full transition-colors disabled:opacity-50 ${
-        checked ? "bg-[#F97316]" : "bg-[#262626]"
-      }`}
+      className={`relative w-9 h-5 rounded-full transition-colors disabled:opacity-50 ${checked ? "bg-[#F97316]" : "bg-[#262626]"}`}
     >
-      <div
-        className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-          checked ? "translate-x-4" : "translate-x-0"
-        }`}
-      />
+      <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${checked ? "translate-x-4" : "translate-x-0"}`} />
     </button>
   );
 }
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<ProductWithCategory[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [stockModal, setStockModal] = useState<ProductWithCategory | null>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  const fetchProducts = useCallback(async () => {
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  const fetchProducts = useCallback(async (p: number, q: string) => {
     setLoading(true);
-    const res = await fetch("/api/admin/products?page=1&pageSize=200");
+    const params = new URLSearchParams({ page: String(p), pageSize: String(PAGE_SIZE) });
+    if (q.trim()) params.set("search", q.trim());
+    const res = await fetch(`/api/admin/products?${params}`);
     const data = await res.json();
     setProducts(data.products ?? []);
+    setTotal(data.total ?? 0);
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+  useEffect(() => { fetchProducts(page, search); }, [fetchProducts, page, search]);
 
-  async function handleToggle(
-    id: string,
-    field: "in_stock" | "is_active",
-    value: boolean
-  ) {
+  // Debounced search
+  function handleSearchInput(val: string) {
+    setSearchInput(val);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      setPage(1);
+      setSearch(val);
+    }, 350);
+  }
+
+  async function handleToggleActive(id: string, field: "is_active", value: boolean) {
     setToggling(id + field);
     await fetch(`/api/admin/products/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ [field]: value }),
     });
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
-    );
+    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
     setToggling(null);
   }
 
+  async function confirmStock(product: ProductWithCategory, qty: number) {
+    setStockModal(null);
+    setToggling(product.id + "in_stock");
+    await fetch(`/api/admin/products/${product.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ in_stock: true, stock_count: qty }),
+    });
+    setProducts((prev) => prev.map((p) => p.id === product.id ? { ...p, in_stock: true, stock_count: qty } : p));
+    setToggling(null);
+  }
+
+  async function handleStockToggle(product: ProductWithCategory, newVal: boolean) {
+    if (newVal) {
+      // Enabling in_stock — ask for quantity first
+      setStockModal(product);
+    } else {
+      // Disabling in_stock — no confirmation needed
+      setToggling(product.id + "in_stock");
+      await fetch(`/api/admin/products/${product.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ in_stock: false, stock_count: 0 }),
+      });
+      setProducts((prev) => prev.map((p) => p.id === product.id ? { ...p, in_stock: false, stock_count: 0 } : p));
+      setToggling(null);
+    }
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      {stockModal && (
+        <StockModal
+          product={stockModal}
+          onConfirm={(qty) => confirmStock(stockModal, qty)}
+          onCancel={() => setStockModal(null)}
+        />
+      )}
+
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-bold font-mono text-[#F5F5F5]">Products</h1>
-          <p className="text-sm text-[#525252] mt-1">{products.length} items in catalog</p>
+          <p className="text-sm text-[#525252] mt-0.5">{total} items in catalog</p>
         </div>
         <Link href="/admin/products/new">
-          <Button size="sm">
-            <Plus className="w-4 h-4" />
-            Add Product
-          </Button>
+          <Button size="sm"><Plus className="w-4 h-4" /> Add Product</Button>
         </Link>
       </div>
 
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525252]" />
+        <input
+          value={searchInput}
+          onChange={(e) => handleSearchInput(e.target.value)}
+          placeholder="Search products…"
+          className="w-full bg-[#161616] border border-[#262626] rounded-lg pl-9 pr-9 py-2.5 text-sm text-[#F5F5F5] placeholder:text-[#525252] focus:outline-none focus:border-[#F97316]"
+        />
+        {searchInput && (
+          <button onClick={() => { setSearchInput(""); setSearch(""); setPage(1); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#525252] hover:text-[#A3A3A3]">
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Table */}
       {loading ? (
         <div className="bg-[#161616] border border-[#262626] rounded-lg divide-y divide-[#1A1A1A]">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="px-4 py-3 flex items-center gap-4">
               <div className="w-10 h-10 bg-[#262626] rounded animate-pulse" />
-              <div className="flex-1 space-y-1">
+              <div className="flex-1 space-y-1.5">
                 <div className="h-3 bg-[#262626] rounded w-48 animate-pulse" />
                 <div className="h-3 bg-[#1A1A1A] rounded w-24 animate-pulse" />
               </div>
             </div>
           ))}
         </div>
+      ) : products.length === 0 ? (
+        <div className="bg-[#161616] border border-[#262626] rounded-lg flex flex-col items-center justify-center py-20 text-center">
+          <Package className="w-10 h-10 text-[#525252] mb-3" />
+          <p className="text-[#A3A3A3] text-sm">{search ? `No products matching "${search}"` : "No products yet."}</p>
+          {!search && (
+            <Link href="/admin/products/new" className="mt-3 text-sm text-[#F97316] hover:underline">Add your first product →</Link>
+          )}
+        </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-[#262626]">
           <table className="w-full text-sm min-w-[900px]">
             <thead>
               <tr className="border-b border-[#262626] bg-[#111111]">
-                <th className="px-4 py-3 text-left text-xs font-mono text-[#525252] uppercase tracking-wider">Product</th>
-                <th className="px-4 py-3 text-left text-xs font-mono text-[#525252] uppercase tracking-wider">Category</th>
-                <th className="px-4 py-3 text-right text-xs font-mono text-[#525252] uppercase tracking-wider">Price</th>
-                <th className="px-4 py-3 text-center text-xs font-mono text-[#525252] uppercase tracking-wider">In Stock</th>
-                <th className="px-4 py-3 text-center text-xs font-mono text-[#525252] uppercase tracking-wider">Active</th>
-                <th className="px-4 py-3 text-right text-xs font-mono text-[#525252] uppercase tracking-wider">Interests</th>
-                <th className="px-4 py-3 text-right text-xs font-mono text-[#525252] uppercase tracking-wider">Actions</th>
+                {["Product", "Category", "Price", "In Stock", "Active", "Interests", "Actions"].map(h => (
+                  <th key={h} className={`px-4 py-3 text-xs font-mono text-[#525252] uppercase tracking-wider ${h === "Price" || h === "Interests" || h === "Actions" ? "text-right" : "text-left"} ${h === "In Stock" || h === "Active" ? "text-center" : ""}`}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -116,60 +211,41 @@ export default function AdminProductsPage() {
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded bg-[#1E1E1E] border border-[#262626] flex-shrink-0 overflow-hidden">
                         {p.images?.[0] ? (
-                          <Image
-                            src={p.images[0]}
-                            alt={p.name}
-                            width={40}
-                            height={40}
-                            className="w-full h-full object-cover"
-                          />
+                          <Image src={p.images[0]} alt={p.name} width={40} height={40} className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-[#525252] text-xs font-mono">
-                            {p.name[0]}
-                          </div>
+                          <div className="w-full h-full flex items-center justify-center text-[#525252] text-xs font-mono">{p.name[0]}</div>
                         )}
                       </div>
                       <div>
                         <p className="font-medium text-[#F5F5F5] leading-tight">{p.name}</p>
                         <p className="text-xs text-[#525252] font-mono">{p.sku ?? p.slug}</p>
+                        {p.in_stock && p.stock_count > 0 && (
+                          <p className="text-xs text-[#22C55E]">{p.stock_count} units</p>
+                        )}
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-[#A3A3A3] text-xs">
-                    {p.category?.name ?? "—"}
-                  </td>
+                  <td className="px-4 py-3 text-[#A3A3A3] text-xs">{p.category?.name ?? "—"}</td>
                   <td className="px-4 py-3 text-right font-mono">
                     <span className="text-[#F97316] font-semibold">₹{p.price}</span>
-                    {p.compare_price && (
-                      <span className="text-[#525252] line-through text-xs ml-1">₹{p.compare_price}</span>
-                    )}
+                    {p.compare_price && <span className="text-[#525252] line-through text-xs ml-1">₹{p.compare_price}</span>}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <Toggle
-                      checked={p.in_stock}
-                      disabled={toggling === p.id + "in_stock"}
-                      onChange={(v) => handleToggle(p.id, "in_stock", v)}
-                    />
+                    <Toggle checked={p.in_stock} disabled={toggling === p.id + "in_stock"} onChange={(v) => handleStockToggle(p, v)} />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <Toggle
-                      checked={p.is_active}
-                      disabled={toggling === p.id + "is_active"}
-                      onChange={(v) => handleToggle(p.id, "is_active", v)}
-                    />
+                    <Toggle checked={p.is_active} disabled={toggling === p.id + "is_active"} onChange={(v) => handleToggleActive(p.id, "is_active", v)} />
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-[#F97316] font-bold">
-                    {p.interest_count}
-                  </td>
+                  <td className="px-4 py-3 text-right font-mono text-[#F97316] font-bold">{p.interest_count}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <Link href={`/admin/products/${p.id}/edit`}>
-                        <button className="p-1.5 text-[#525252] hover:text-[#F5F5F5] hover:bg-[#1E1E1E] rounded transition-colors">
+                        <button className="p-1.5 text-[#525252] hover:text-[#F5F5F5] hover:bg-[#1E1E1E] rounded transition-colors" title="Edit">
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
                       </Link>
                       <Link href={`/products/${p.slug}`} target="_blank">
-                        <button className="p-1.5 text-[#525252] hover:text-[#F97316] hover:bg-[#F9731615] rounded transition-colors">
+                        <button className="p-1.5 text-[#525252] hover:text-[#F97316] hover:bg-[#F9731615] rounded transition-colors" title="View on site">
                           <ExternalLink className="w-3.5 h-3.5" />
                         </button>
                       </Link>
@@ -177,18 +253,29 @@ export default function AdminProductsPage() {
                   </td>
                 </tr>
               ))}
-              {products.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-[#525252]">
-                    No products yet.{" "}
-                    <Link href="/admin/products/new" className="text-[#F97316] hover:underline">
-                      Add your first product
-                    </Link>
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-xs text-[#525252]">
+            Page {page} of {totalPages} · {total} products
+          </p>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>← Prev</Button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              const n = Math.max(1, Math.min(page - 2, totalPages - 4)) + i;
+              return n <= totalPages ? (
+                <button key={n} onClick={() => setPage(n)}
+                  className={`w-8 h-8 rounded text-sm font-mono transition-colors ${n === page ? "bg-[#F97316] text-white" : "text-[#A3A3A3] hover:bg-[#1E1E1E]"}`}
+                >{n}</button>
+              ) : null;
+            })}
+            <Button variant="ghost" size="sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next →</Button>
+          </div>
         </div>
       )}
     </div>

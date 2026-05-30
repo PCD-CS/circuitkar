@@ -1,30 +1,247 @@
-import { Metadata } from "next";
-import { ShoppingCart, Clock } from "lucide-react";
+"use client";
 
-export const metadata: Metadata = { title: "Orders" };
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { ShoppingCart, Search, X, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { Input } from "@/components/ui/Input";
+import type { Order, OrderStatus } from "@/types";
+
+const STATUSES: OrderStatus[] = [
+  "pending",
+  "confirmed",
+  "shipped",
+  "delivered",
+  "cancelled",
+];
+
+const STATUS_STYLE: Record<string, string> = {
+  pending: "bg-[#F59E0B20] text-[#F59E0B] border-[#F59E0B]/40",
+  confirmed: "bg-[#22C55E20] text-[#22C55E] border-[#22C55E]/40",
+  shipped: "bg-[#F9731620] text-[#F97316] border-[#F97316]/40",
+  delivered: "bg-[#22C55E20] text-[#22C55E] border-[#22C55E]/40",
+  cancelled: "bg-[#EF444420] text-[#EF4444] border-[#EF4444]/40",
+};
+
+function inr(n: number | null) {
+  return `₹${Number(n ?? 0).toLocaleString("en-IN")}`;
+}
 
 export default function AdminOrdersPage() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [status, setStatus] = useState("");
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  const pageSize = 20;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const qs = new URLSearchParams({ page: String(page) });
+    if (status) qs.set("status", status);
+    if (search) qs.set("search", search);
+    try {
+      const res = await fetch(`/api/admin/orders?${qs.toString()}`);
+      const data = await res.json();
+      if (res.ok) {
+        setOrders(data.orders ?? []);
+        setTotal(data.total ?? 0);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [page, status, search]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Debounced search
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  async function updateStatus(order: Order, newStatus: string) {
+    setUpdatingId(order.id);
+    try {
+      const res = await fetch(`/api/admin/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === order.id ? { ...o, status: newStatus as OrderStatus } : o,
+          ),
+        );
+      }
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold font-mono text-[#F5F5F5]">Orders</h1>
-        <p className="text-sm text-[#525252] mt-1">Order management</p>
+        <p className="text-sm text-[#525252] mt-1">
+          {total} order{total === 1 ? "" : "s"} total
+        </p>
       </div>
 
-      <div className="bg-[#161616] border border-[#262626] rounded-lg flex flex-col items-center justify-center py-24 text-center">
-        <div className="w-16 h-16 rounded-full bg-[#1E1E1E] flex items-center justify-center mb-4">
-          <ShoppingCart className="w-8 h-8 text-[#525252]" />
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#525252]" />
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search by order number or email…"
+            className="w-full bg-[#111111] border border-[#262626] rounded-lg pl-9 pr-9 py-2.5 text-sm text-[#F5F5F5] placeholder:text-[#525252] focus:outline-none focus:border-[#F97316]"
+          />
+          {searchInput && (
+            <button
+              onClick={() => setSearchInput("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#525252] hover:text-[#F5F5F5]"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
-        <h2 className="text-lg font-semibold text-[#F5F5F5] mb-2">Coming in Phase 2</h2>
-        <p className="text-sm text-[#525252] max-w-sm">
-          Order management will be activated once Razorpay payments go live.
-          The database table is ready and waiting.
-        </p>
-        <div className="flex items-center gap-2 mt-6 text-xs text-[#525252] font-mono">
-          <Clock className="w-3.5 h-3.5" />
-          <span>Activate by setting RAZORPAY_LIVE=true</span>
-        </div>
+        <select
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setPage(1);
+          }}
+          className="bg-[#111111] border border-[#262626] rounded-lg px-3 py-2.5 text-sm text-[#F5F5F5] focus:outline-none focus:border-[#F97316]"
+        >
+          <option value="">All statuses</option>
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
       </div>
+
+      {/* Table */}
+      <div className="bg-[#161616] border border-[#262626] rounded-lg overflow-hidden">
+        {loading ? (
+          <div className="py-24 text-center text-sm text-[#525252]">Loading…</div>
+        ) : orders.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 text-center">
+            <div className="w-16 h-16 rounded-full bg-[#1E1E1E] flex items-center justify-center mb-4">
+              <ShoppingCart className="w-8 h-8 text-[#525252]" />
+            </div>
+            <p className="text-sm text-[#525252]">No orders found.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#262626] text-left text-xs uppercase tracking-wider text-[#525252]">
+                  <th className="px-4 py-3 font-medium">Order</th>
+                  <th className="px-4 py-3 font-medium">Customer</th>
+                  <th className="px-4 py-3 font-medium">Date</th>
+                  <th className="px-4 py-3 font-medium">Items</th>
+                  <th className="px-4 py-3 font-medium">Total</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#262626]">
+                {orders.map((o) => (
+                  <tr key={o.id} className="hover:bg-[#1A1A1A]">
+                    <td className="px-4 py-3 font-mono text-[#F5F5F5]">
+                      {o.order_number}
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-[#F5F5F5]">{o.customer_name}</p>
+                      <p className="text-xs text-[#525252]">{o.customer_email}</p>
+                    </td>
+                    <td className="px-4 py-3 text-[#A3A3A3] whitespace-nowrap">
+                      {new Date(o.created_at).toLocaleDateString("en-IN")}
+                    </td>
+                    <td className="px-4 py-3 text-[#A3A3A3]">
+                      {(o.items ?? []).reduce((n, it) => n + (it.qty || 0), 0)}
+                    </td>
+                    <td className="px-4 py-3 text-[#F97316] font-medium">
+                      {inr(o.total)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-block rounded-md border px-2 py-0.5 text-xs ${
+                          STATUS_STYLE[o.status] ??
+                          "bg-[#262626] text-[#A3A3A3] border-[#262626]"
+                        }`}
+                      >
+                        {o.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <select
+                          value={o.status}
+                          disabled={updatingId === o.id}
+                          onChange={(e) => updateStatus(o, e.target.value)}
+                          className="bg-[#111111] border border-[#262626] rounded-md px-2 py-1.5 text-xs text-[#F5F5F5] focus:outline-none focus:border-[#F97316] disabled:opacity-50"
+                        >
+                          {STATUSES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                        <Link
+                          href={`/admin/orders/${o.order_number}`}
+                          className="inline-flex items-center gap-1 rounded-md border border-[#262626] px-2.5 py-1.5 text-xs text-[#A3A3A3] hover:border-[#F97316] hover:text-[#F97316]"
+                        >
+                          <Eye className="h-3.5 w-3.5" /> View
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-[#525252]">
+            Page {page} of {totalPages}
+          </span>
+          <div className="flex gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#262626] px-3 py-1.5 text-xs text-[#A3A3A3] hover:text-[#F5F5F5] disabled:opacity-40"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" /> Prev
+            </button>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="inline-flex items-center gap-1 rounded-lg border border-[#262626] px-3 py-1.5 text-xs text-[#A3A3A3] hover:text-[#F5F5F5] disabled:opacity-40"
+            >
+              Next <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

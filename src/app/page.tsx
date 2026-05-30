@@ -100,7 +100,7 @@ export default async function HomePage() {
       </section>
 
       {/* Featured products */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6">
+      <section className="mx-auto max-w-7xl px-4 py-8 sm:py-16 sm:px-6">
         <div className="mb-8 flex items-end justify-between">
           <div>
             <h2 className="text-2xl font-bold text-[#F5F5F5]">Fast Movers</h2>

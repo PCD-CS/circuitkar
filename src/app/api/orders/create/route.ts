@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCustomerId } from "@/lib/auth";
+import { getResendClient, getEmailConfig } from "@/lib/resend";
+import { OrderConfirmationEmail } from "@/lib/emails/order-confirmation";
+import type { OrderItem, ShippingAddress } from "@/types";
 
 function generateOrderNumber(): string {
   const ts = Date.now().toString(36).toUpperCase();
@@ -127,6 +130,36 @@ export async function POST(request: NextRequest) {
 
   // Clear the cart
   await supabase.from("cart_items").delete().eq("cart_id", cart.id);
+
+  // Send order confirmation email (best-effort, never blocks the response)
+  try {
+    const emailConfig = await getEmailConfig();
+    if (emailConfig.sendOrderEmails && customerEmail) {
+      const resend = await getResendClient();
+      if (resend) {
+        const siteUrl =
+          process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in";
+        const addr = order.shipping_address as ShippingAddress;
+        await resend.emails.send({
+          from: emailConfig.from,
+          to: customerEmail,
+          subject: `Order #${orderNumber} confirmed — Circuitkar`,
+          react: OrderConfirmationEmail({
+            orderNumber,
+            customerName: order.customer_name || "there",
+            items: orderItems as OrderItem[],
+            shippingAddress: addr,
+            subtotal: body.subtotal,
+            shipping: body.shipping,
+            total: body.total,
+            siteUrl,
+          }),
+        });
+      }
+    }
+  } catch (err) {
+    console.error("Order confirmation email failed:", err);
+  }
 
   return NextResponse.json({ orderNumber, order }, { status: 201 });
 }

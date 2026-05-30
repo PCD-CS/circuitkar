@@ -10,6 +10,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { CartProvider } from "@/lib/cart-context";
 import { SiteConfigProvider } from "@/lib/site-config";
 import { CartDrawer } from "@/components/cart/CartDrawer";
+import { MaintenanceOverlay } from "@/components/layout/MaintenanceOverlay";
 import { getSettings } from "@/lib/settings";
 import type { LaunchMode } from "@/types";
 
@@ -57,6 +58,9 @@ export const metadata: Metadata = {
   },
 };
 
+// Always re-render — settings (launch mode, announcement) must reflect DB in real time
+export const dynamic = "force-dynamic";
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -91,13 +95,19 @@ export default async function RootLayout({
                   parseInt(settings!.free_shipping_threshold) || 0,
               }}
             >
-              <CartProvider>
-                <Header />
-                <main className="min-h-[60vh]">{children}</main>
-                <Footer whatsappNumber={settings!.whatsapp_number} />
-                <WhatsAppButton number={settings!.whatsapp_number} />
-                <CartDrawer />
-              </CartProvider>
+              <MaintenanceOverlay
+                mode={settings!.launch_mode || "prelaunch"}
+                message={settings!.maintenance_message ?? ""}
+                whatsappNumber={settings!.whatsapp_number}
+              >
+                <CartProvider>
+                  <Header />
+                  <main className="min-h-[60vh]">{children}</main>
+                  <Footer whatsappNumber={settings!.whatsapp_number} />
+                  <WhatsAppButton number={settings!.whatsapp_number} />
+                  <CartDrawer />
+                </CartProvider>
+              </MaintenanceOverlay>
             </SiteConfigProvider>
           )}
         </ToastProvider>

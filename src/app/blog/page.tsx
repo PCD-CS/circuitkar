@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { FileText } from "lucide-react";
+import { FileText, Clock, Eye } from "lucide-react";
 import { getPublishedPosts, getAllTags } from "@/lib/blog";
 import { Badge } from "@/components/ui/Badge";
+
+function readTime(excerpt: string | null): string {
+  // Estimate from excerpt word count × 10 (assuming excerpt is ~10% of full post)
+  if (!excerpt) return "3 min read";
+  const words = excerpt.split(/\s+/).length * 10;
+  return `${Math.max(1, Math.ceil(words / 200))} min read`;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -124,26 +131,27 @@ export default async function BlogPage({
                 {post.tags && post.tags.length > 0 && (
                   <div className="mb-2 flex flex-wrap gap-1">
                     {post.tags.slice(0, 2).map((t) => (
-                      <Badge key={t} variant="category">
-                        {t}
-                      </Badge>
+                      <Badge key={t} variant="category">{t}</Badge>
                     ))}
                   </div>
                 )}
-                <h2 className="text-base font-semibold leading-snug text-[#F5F5F5] transition-colors group-hover:text-[#F97316]">
+                <h2 className="text-base font-semibold leading-snug text-[#F5F5F5] transition-colors group-hover:text-[#F97316] line-clamp-2">
                   {post.title}
                 </h2>
                 {post.excerpt && (
-                  <p className="mt-2 line-clamp-2 text-sm text-[#A3A3A3]">
-                    {post.excerpt}
-                  </p>
+                  <p className="mt-2 line-clamp-2 text-sm text-[#A3A3A3]">{post.excerpt}</p>
                 )}
-                <p className="mt-3 text-xs text-[#525252]">
-                  {post.author_name} ·{" "}
-                  {post.published_at
-                    ? new Date(post.published_at).toLocaleDateString("en-IN")
-                    : ""}
-                </p>
+                <div className="mt-auto pt-3 flex items-center justify-between text-xs text-[#525252]">
+                  <span>
+                    {post.published_at
+                      ? new Date(post.published_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                      : post.author_name}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{readTime(post.excerpt)}</span>
+                    {post.view_count > 0 && <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{post.view_count}</span>}
+                  </div>
+                </div>
               </div>
             </Link>
           ))}

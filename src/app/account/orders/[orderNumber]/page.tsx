@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ExternalLink } from "lucide-react";
+import { ChevronLeft, ExternalLink, MessageCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Badge } from "@/components/ui/Badge";
 import { formatPrice } from "@/lib/utils";
+import { getSettings } from "@/lib/settings";
 import type { Order, OrderItem, ShippingAddress } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +50,11 @@ export default async function OrderDetailPage({
   const addr = order.shipping_address as ShippingAddress;
   const currentIndex = TIMELINE.findIndex((t) => t.key === order.status);
   const cancelled = order.status === "cancelled";
+
+  const settings = await getSettings();
+  const waHref = `https://wa.me/${settings.whatsapp_number}?text=${encodeURIComponent(
+    `Hi Circuitkar, I need help with order #${order.order_number}`,
+  )}`;
 
   return (
     <div className="space-y-6">
@@ -188,6 +194,23 @@ export default async function OrderDetailPage({
             Payment: {order.payment_status}
           </p>
         </div>
+      </div>
+
+      {/* Need help */}
+      <div className="rounded-lg border border-[#262626] bg-[#161616] p-5">
+        <h3 className="mb-1 text-sm font-semibold text-[#F5F5F5]">Need help?</h3>
+        <p className="mb-3 text-sm text-[#A3A3A3]">
+          Questions about this order? Reach us on WhatsApp.
+        </p>
+        <a
+          href={waHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-lg bg-[#22C55E] px-4 py-2 text-sm font-semibold text-white transition-transform hover:scale-[1.02] active:scale-95"
+        >
+          <MessageCircle className="h-4 w-4" />
+          Chat on WhatsApp
+        </a>
       </div>
     </div>
   );

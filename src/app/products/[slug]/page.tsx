@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { ChevronRight, FileText } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
@@ -8,12 +7,13 @@ import { OutOfStockBadge } from "@/components/product/OutOfStockBadge";
 import { SpecsTable } from "@/components/product/SpecsTable";
 import { NotifyCTA } from "@/components/product/NotifyCTA";
 import { ProductGrid } from "@/components/product/ProductGrid";
+import { ProductImages } from "@/components/product/ProductImages";
+import { RichTextRenderer } from "@/components/ui/RichTextRenderer";
 import {
   getProductBySlug,
   getRelatedProducts,
   getProducts,
 } from "@/lib/products";
-import { getCategoryIcon } from "@/lib/category-icons";
 import { formatPrice, discountPercent } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +38,10 @@ export async function generateMetadata({
   if (!product) {
     return { title: "Product Not Found" };
   }
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in";
+  const ogImage = `${siteUrl}/api/og?title=${encodeURIComponent(
+    product.name,
+  )}&price=${product.price}`;
   return {
     title: `Buy ${product.name} in India`,
     description:
@@ -46,7 +50,7 @@ export async function generateMetadata({
     openGraph: {
       title: `Buy ${product.name} in India | Circuitkar`,
       description: product.short_description || undefined,
-      images: product.images?.length ? [product.images[0]] : undefined,
+      images: [ogImage],
     },
   };
 }
@@ -61,8 +65,6 @@ export default async function ProductPage({
   if (!product) notFound();
 
   const related = await getRelatedProducts(product.category_id, product.id);
-  const Icon = getCategoryIcon(product.category?.icon);
-  const image = product.images?.[0];
   const discount = discountPercent(product.price, product.compare_price);
 
   const siteUrl =
@@ -113,43 +115,10 @@ export default async function ProductPage({
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
         {/* Left: image */}
         <div>
-          <div className="relative aspect-square overflow-hidden rounded-lg border border-[#262626] bg-[#111111]">
-            {image ? (
-              <Image
-                src={image}
-                alt={product.name}
-                fill
-                sizes="(max-width: 1024px) 100vw, 50vw"
-                className="object-contain p-6"
-                priority
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center">
-                <Icon
-                  className="h-24 w-24 text-[#262626]"
-                  strokeWidth={1}
-                />
-              </div>
-            )}
-          </div>
-          {product.images && product.images.length > 1 && (
-            <div className="mt-3 flex gap-3">
-              {product.images.slice(0, 5).map((img, i) => (
-                <div
-                  key={i}
-                  className="relative h-16 w-16 overflow-hidden rounded-lg border border-[#262626] bg-[#111111]"
-                >
-                  <Image
-                    src={img}
-                    alt={`${product.name} ${i + 1}`}
-                    fill
-                    sizes="64px"
-                    className="object-contain p-1"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+          <ProductImages
+            images={product.images ?? []}
+            productName={product.name}
+          />
         </div>
 
         {/* Right: details */}
@@ -229,9 +198,7 @@ export default async function ProductPage({
       {product.description && (
         <section className="mt-12 max-w-3xl">
           <h2 className="mb-4 text-lg font-bold text-[#F5F5F5]">Overview</h2>
-          <div className="whitespace-pre-line text-[#A3A3A3]">
-            {product.description}
-          </div>
+          <RichTextRenderer html={product.description} />
         </section>
       )}
 
