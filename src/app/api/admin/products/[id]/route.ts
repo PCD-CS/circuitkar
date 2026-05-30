@@ -4,8 +4,9 @@ import { requireAdmin } from "@/lib/auth";
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const auth = await requireAdmin(request);
   if (!auth.ok) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -16,7 +17,6 @@ export async function PUT(
   } catch {
     return NextResponse.json({ error: "Invalid body." }, { status: 400 });
   }
-  // never allow client to overwrite id / created_at
   delete body.id;
   delete body.created_at;
 
@@ -24,7 +24,7 @@ export async function PUT(
   const { data, error } = await supabase
     .from("products")
     .update({ ...body, updated_at: new Date().toISOString() })
-    .eq("id", params.id)
+    .eq("id", id)
     .select("*")
     .single();
   if (error) {
@@ -35,17 +35,15 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params;
   const auth = await requireAdmin(request);
   if (!auth.ok) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("products")
-    .delete()
-    .eq("id", params.id);
+  const { error } = await supabase.from("products").delete().eq("id", id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

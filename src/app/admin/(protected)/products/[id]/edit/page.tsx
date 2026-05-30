@@ -30,10 +30,11 @@ async function getCategories(): Promise<Category[]> {
 export default async function EditProductPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const [product, categories] = await Promise.all([
-    getProduct(params.id),
+    getProduct(id),
     getCategories(),
   ]);
 
