@@ -16,6 +16,8 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,19 +25,37 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (authError) {
-      setError(authError.message);
+      setError(
+        authError.message.includes("Invalid login credentials")
+          ? "Incorrect email or password."
+          : authError.message,
+      );
       setLoading(false);
       return;
     }
 
     router.push(redirect);
     router.refresh();
+  }
+
+  async function handleForgotPassword() {
+    if (!email) {
+      setError("Enter your email above first, then click Forgot password.");
+      return;
+    }
+    setResetLoading(true);
+    setError("");
+    const supabase = createClient();
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${siteUrl}/auth/reset-password`,
+    });
+    // Always show success — don't reveal if email exists
+    setResetSent(true);
+    setResetLoading(false);
   }
 
   return (
@@ -60,6 +80,12 @@ export default function AdminLoginPage() {
             </div>
           )}
 
+          {resetSent && (
+            <div className="bg-[#22C55E15] border border-[#22C55E]/30 rounded-lg px-4 py-3 text-sm text-[#22C55E] mb-4">
+              Password reset email sent — check your inbox.
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
               label="Email"
@@ -68,7 +94,7 @@ export default function AdminLoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
-              placeholder="admin@circuitkar.in"
+              placeholder="chirag.sanghvi05@gmail.com"
             />
             <Input
               label="Password"
@@ -79,7 +105,17 @@ export default function AdminLoginPage() {
               autoComplete="current-password"
               placeholder="••••••••"
             />
-            <Button type="submit" loading={loading} className="w-full mt-2">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={resetLoading}
+                className="text-xs text-[#525252] hover:text-[#F97316] transition-colors"
+              >
+                {resetLoading ? "Sending…" : "Forgot password?"}
+              </button>
+            </div>
+            <Button type="submit" loading={loading} className="w-full">
               Sign In
             </Button>
           </form>

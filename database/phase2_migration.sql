@@ -119,6 +119,10 @@ begin
   values (new.id, coalesce(new.raw_user_meta_data->>'full_name', ''))
   on conflict (id) do nothing;
   return new;
+exception when others then
+  -- Never crash the auth signup flow due to profile creation errors.
+  -- Profile can be created on first login if trigger was missed.
+  return new;
 end;
 $$ language plpgsql security definer;
 

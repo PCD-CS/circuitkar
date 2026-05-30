@@ -9,17 +9,13 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/account") || pathname.startsWith("/checkout");
   const needsAuth = isAdminRoute || isCustomerRoute;
 
-  // For public routes we only need to forward the pathname header.
-  // Skip the Supabase auth network call entirely — no point hitting the
-  // auth server on every product page or API route.
+  // Public routes — only set the pathname header, skip Supabase entirely.
   if (!needsAuth) {
     const response = NextResponse.next({ request });
     response.headers.set("x-pathname", pathname);
     return response;
   }
 
-  // Protected routes: set up the Supabase client so it can refresh the session
-  // cookie and then read claims from the (already-validated) JWT locally.
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -43,12 +39,11 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // getClaims() reads the JWT locally — no network round-trip.
-  // Use getUser() instead if you need server-side token revocation checks.
   const { data } = await supabase.auth.getClaims();
   const isLoggedIn = !!data?.claims;
+  const userEmail = (data?.claims?.email as string) || "";
 
-  // Customer routes (/account, /checkout): any authenticated user is allowed.
+  // Customer routes — any authenticated user.
   if (isCustomerRoute) {
     if (!isLoggedIn) {
       const url = request.nextUrl.clone();
@@ -61,15 +56,27 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  // Admin routes.
-  if (!isLoginRoute && !isLoggedIn) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/admin/login";
-    url.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(url);
+  // Admin routes — must be logged in AND be the designated admin.
+  // Admin is identified by ADMIN_EMAIL env var.
+  // If ADMIN_EMAIL is not set, fall back to checking app_metadata.role = "admin".
+  const adminEmail = process.env.ADMIN_EMAIL || "";
+  const isAdmin = adminEmail
+    ? userEmail === adminEmail
+    : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data?.claims as any)?.app_metadata?.role === "admin";
+
+  if (!isLoginRoute) {
+    if (!isLoggedIn || !isAdmin) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin/login";
+      url.search = "";
+      url.searchParams.set("redirect", pathname);
+      return NextResponse.redirect(url);
+    }
   }
 
-  if (isLoginRoute && isLoggedIn) {
+  // If logged in as admin and hitting login page → redirect to dashboard.
+  if (isLoginRoute && isLoggedIn && isAdmin) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin/dashboard";
     url.search = "";
@@ -81,6 +88,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run on all routes (to set x-pathname), but exclude Next.js internals and static files.
   matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

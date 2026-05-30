@@ -24,9 +24,11 @@ const strengthMeta: Record<PasswordStrength, { label: string; color: string; wid
 function SignupInner() {
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "/account";
+  // Pre-fill email if redirected from login (OTP "no account" flow)
+  const emailParam = searchParams.get("email") || "";
 
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(emailParam);
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [accountType, setAccountType] = useState<AccountType>("personal");
@@ -68,13 +70,24 @@ function SignupInner() {
 
     setLoading(true);
     const supabase = createClient();
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName } },
+      options: {
+        data: { full_name: fullName },
+        emailRedirectTo: `${siteUrl}/auth/verify`,
+      },
     });
     if (signUpError) {
-      setError(signUpError.message);
+      // Common cause: Supabase SMTP misconfigured → "unexpected_failure"
+      // Tell the user clearly what to do.
+      const msg =
+        signUpError.message.includes("unexpected_failure") ||
+        signUpError.message.includes("sending")
+          ? "Account creation failed — the email system isn't configured yet. Please contact us on WhatsApp to get access."
+          : signUpError.message;
+      setError(msg);
       setLoading(false);
       return;
     }
@@ -99,6 +112,13 @@ function SignupInner() {
       } catch {
         // non-fatal — profile can be completed later in account settings
       }
+    }
+
+    // If email confirmation is disabled in Supabase, user is immediately active.
+    // Redirect them straight to their account instead of showing "check email".
+    if (data.session) {
+      window.location.href = returnTo;
+      return;
     }
 
     setDone(true);
