@@ -59,7 +59,33 @@ export default function CouponsPage() {
     setForm(p => ({ ...p, [key]: val }));
   }
 
+  function validateForm(): string {
+    const code = form.code.trim();
+    if (!code) return "Coupon code is required.";
+    if (!/^[A-Z0-9_-]+$/.test(code)) return "Code can only contain letters, numbers, - and _.";
+    const val = Number(form.discount_value);
+    if (!val || val <= 0) return "Discount value must be greater than 0.";
+    if (form.discount_type === "percentage" && val > 100) return "Percentage discount cannot exceed 100%.";
+    if (form.max_discount_amount !== null && Number(form.max_discount_amount) <= 0) return "Max discount amount must be greater than 0.";
+    if (form.min_order_value !== null && Number(form.min_order_value) < 0) return "Min order value cannot be negative.";
+    if (form.usage_limit !== null && Number(form.usage_limit) < 1) return "Total uses limit must be at least 1.";
+    if (form.per_user_limit !== null && Number(form.per_user_limit) < 1) return "Per-user limit must be at least 1.";
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (form.starts_at) {
+      const start = new Date(form.starts_at);
+      if (start < today) return "Valid From date cannot be in the past.";
+    }
+    if (form.expires_at) {
+      const exp = new Date(form.expires_at);
+      if (exp < today) return "Expiry date cannot be in the past.";
+      if (form.starts_at && exp <= new Date(form.starts_at)) return "Expiry date must be after the Valid From date.";
+    }
+    return "";
+  }
+
   async function createCoupon() {
+    const validationError = validateForm();
+    if (validationError) { setError(validationError); return; }
     setError(""); setSaving(true);
     const res = await fetch("/api/admin/coupons", {
       method: "POST",
@@ -136,23 +162,29 @@ export default function CouponsPage() {
                 <option value="flat">Flat ₹</option>
               </select>
             </div>
-            <Input label={form.discount_type === "percentage" ? "Discount %" : "Discount ₹"} type="number" value={form.discount_value} onChange={e => setF("discount_value", e.target.value)} />
+            <Input label={form.discount_type === "percentage" ? "Discount %" : "Discount ₹"} type="number" min={1} max={form.discount_type === "percentage" ? 100 : undefined} value={form.discount_value} onChange={e => setF("discount_value", e.target.value)} />
             {form.discount_type === "percentage" && (
-              <Input label="Max Discount ₹" type="number" value={form.max_discount_amount ?? ""} onChange={e => setF("max_discount_amount", e.target.value || null)} placeholder="No limit" />
+              <Input label="Max Discount ₹" type="number" min={1} value={form.max_discount_amount ?? ""} onChange={e => setF("max_discount_amount", e.target.value || null)} placeholder="No limit" />
             )}
-            <Input label="Min Order ₹" type="number" value={form.min_order_value ?? ""} onChange={e => setF("min_order_value", e.target.value || null)} placeholder="0" />
+            <Input label="Min Order ₹" type="number" min={0} value={form.min_order_value ?? ""} onChange={e => setF("min_order_value", e.target.value || null)} placeholder="0" />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Input label="Total Uses Limit" type="number" value={form.usage_limit ?? ""} onChange={e => setF("usage_limit", e.target.value || null)} placeholder="Unlimited" />
-            <Input label="Per-User Limit" type="number" value={form.per_user_limit ?? ""} onChange={e => setF("per_user_limit", e.target.value || null)} placeholder="1" />
+            <Input label="Total Uses Limit" type="number" min={1} value={form.usage_limit ?? ""} onChange={e => setF("usage_limit", e.target.value || null)} placeholder="Unlimited" />
+            <Input label="Per-User Limit" type="number" min={1} value={form.per_user_limit ?? ""} onChange={e => setF("per_user_limit", e.target.value || null)} placeholder="1" />
             <div>
               <label className="block text-xs text-[#A3A3A3] mb-1.5 font-mono uppercase tracking-wider">Valid From</label>
-              <input type="date" value={form.starts_at?.split("T")[0] ?? ""} onChange={e => setF("starts_at", e.target.value || null)}
+              <input type="date"
+                min={new Date().toISOString().split("T")[0]}
+                value={form.starts_at?.split("T")[0] ?? ""}
+                onChange={e => setF("starts_at", e.target.value || null)}
                 className="w-full bg-[#111111] border border-[#262626] rounded-lg px-3 py-2.5 text-sm text-[#F5F5F5] focus:outline-none focus:border-[#F97316]" />
             </div>
             <div>
               <label className="block text-xs text-[#A3A3A3] mb-1.5 font-mono uppercase tracking-wider">Expires</label>
-              <input type="date" value={form.expires_at?.split("T")[0] ?? ""} onChange={e => setF("expires_at", e.target.value || null)}
+              <input type="date"
+                min={form.starts_at?.split("T")[0] ?? new Date().toISOString().split("T")[0]}
+                value={form.expires_at?.split("T")[0] ?? ""}
+                onChange={e => setF("expires_at", e.target.value || null)}
                 className="w-full bg-[#111111] border border-[#262626] rounded-lg px-3 py-2.5 text-sm text-[#F5F5F5] focus:outline-none focus:border-[#F97316]" />
             </div>
           </div>

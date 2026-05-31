@@ -52,6 +52,21 @@ export async function PATCH(request: NextRequest) {
   try { body = await request.json(); }
   catch { return NextResponse.json({ error: "Invalid body." }, { status: 400 }); }
 
+  if (!body.productId) return NextResponse.json({ error: "productId is required." }, { status: 400 });
+  if (!["add", "remove", "set"].includes(body.action)) {
+    return NextResponse.json({ error: "action must be 'add', 'remove', or 'set'." }, { status: 400 });
+  }
+  const qty = Number(body.quantity);
+  if (isNaN(qty) || !Number.isInteger(qty)) {
+    return NextResponse.json({ error: "quantity must be a whole number." }, { status: 400 });
+  }
+  if (body.action === "set" && qty < 0) {
+    return NextResponse.json({ error: "quantity cannot be negative when setting stock." }, { status: 400 });
+  }
+  if ((body.action === "add" || body.action === "remove") && qty < 1) {
+    return NextResponse.json({ error: "quantity must be at least 1 for add/remove." }, { status: 400 });
+  }
+
   const supabase = createAdminClient();
   const { data: product } = await supabase
     .from("products")

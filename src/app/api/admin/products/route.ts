@@ -42,6 +42,15 @@ export async function POST(request: NextRequest) {
   if (!body.name || !body.slug || body.price === undefined) {
     return NextResponse.json({ error: "Name, slug and price are required." }, { status: 400 });
   }
+  if (Number(body.price) <= 0) {
+    return NextResponse.json({ error: "Price must be greater than 0." }, { status: 400 });
+  }
+  if (body.compare_price !== undefined && body.compare_price !== null && Number(body.compare_price) < Number(body.price)) {
+    return NextResponse.json({ error: "Compare-at price must be greater than or equal to the selling price." }, { status: 400 });
+  }
+  if (body.stock_count !== undefined && Number(body.stock_count) < 0) {
+    return NextResponse.json({ error: "Stock count cannot be negative." }, { status: 400 });
+  }
 
   const supabase = createAdminClient();
   const { data, error } = await supabase

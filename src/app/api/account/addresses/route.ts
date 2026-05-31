@@ -35,11 +35,16 @@ export async function POST(request: Request) {
   const required = ["full_name", "phone", "line1", "city", "state", "pincode"];
   for (const f of required) {
     if (!body[f]) {
-      return NextResponse.json(
-        { error: `Missing field: ${f}` },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: `Missing field: ${f}` }, { status: 400 });
     }
+  }
+  const phone = String(body.phone).replace(/\D/g, "");
+  if (phone.length !== 10 || !/^[6-9]/.test(phone)) {
+    return NextResponse.json({ error: "Phone must be a valid 10-digit Indian mobile number." }, { status: 400 });
+  }
+  const pincode = String(body.pincode).replace(/\D/g, "");
+  if (pincode.length !== 6) {
+    return NextResponse.json({ error: "Pincode must be exactly 6 digits." }, { status: 400 });
   }
 
   const supabase = createAdminClient();

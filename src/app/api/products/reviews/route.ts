@@ -31,8 +31,14 @@ export async function POST(request: NextRequest) {
   try { body = await request.json(); }
   catch { return NextResponse.json({ error: "Invalid body." }, { status: 400 }); }
 
-  if (!body.productId || !body.rating || body.rating < 1 || body.rating > 5) {
+  if (!body.productId || !body.rating || body.rating < 1 || body.rating > 5 || !Number.isInteger(body.rating)) {
     return NextResponse.json({ error: "productId and rating (1–5) are required." }, { status: 400 });
+  }
+  if (body.title && body.title.trim().length > 150) {
+    return NextResponse.json({ error: "Review title must be 150 characters or fewer." }, { status: 400 });
+  }
+  if (body.body && body.body.trim().length > 2000) {
+    return NextResponse.json({ error: "Review must be 2000 characters or fewer." }, { status: 400 });
   }
 
   const supabase = createAdminClient();
@@ -62,6 +68,7 @@ export async function POST(request: NextRequest) {
       body: body.body?.trim() || null,
       is_verified: isVerified,
       is_approved: !needsApproval,
+      is_rejected: false, // re-submission clears any previous rejection
       updated_at: new Date().toISOString(),
     }, { onConflict: "product_id,customer_id" })
     .select("id, is_approved")

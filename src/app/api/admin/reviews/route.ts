@@ -2,12 +2,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth";
 
+// Tri-state:
+//   pending  → is_approved = false, is_rejected = false
+//   approved → is_approved = true
+//   rejected → is_rejected = true
+
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (!auth.ok) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const { searchParams } = request.nextUrl;
-  const approved = searchParams.get("approved"); // "true"|"false"|null
+  const tab = searchParams.get("tab"); // "pending" | "approved" | "rejected"
 
   const supabase = createAdminClient();
   // customer_reviews.customer_id → auth.users, not customer_profiles, so PostgREST
@@ -18,9 +23,14 @@ export async function GET(request: NextRequest) {
     .select("*, product:products(name, slug)")
     .order("created_at", { ascending: false });
 
-  if (approved === "true") query = query.eq("is_approved", true);
-  // Pending = explicitly false OR null (newly submitted before moderation sets it)
-  if (approved === "false") query = query.or("is_approved.is.null,is_approved.eq.false");
+  if (tab === "approved") {
+    query = query.eq("is_approved", true);
+  } else if (tab === "rejected") {
+    query = query.eq("is_rejected", true);
+  } else {
+    // pending: not approved, not rejected
+    query = query.eq("is_approved", false).eq("is_rejected", false);
+  }
 
   const { data: reviews, error } = await query.limit(100);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -48,14 +58,29 @@ export async function PATCH(request: NextRequest) {
   const auth = await requireAdmin(request);
   if (!auth.ok) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-  let body: { id: string; is_approved: boolean };
+  let body: { id: string; action: "approve" | "reject" | "restore" };
   try { body = await request.json(); }
   catch { return NextResponse.json({ error: "Invalid body." }, { status: 400 }); }
 
+  if (!body.id || !["approve", "reject", "restore"].includes(body.action)) {
+    return NextResponse.json({ error: "id and action (approve|reject|restore) are required." }, { status: 400 });
+  }
+
   const supabase = createAdminClient();
+
+  let update: Record<string, unknown>;
+  if (body.action === "approve") {
+    update = { is_approved: true, is_rejected: false };
+  } else if (body.action === "reject") {
+    update = { is_approved: false, is_rejected: true };
+  } else {
+    // restore → back to pending
+    update = { is_approved: false, is_rejected: false };
+  }
+
   const { error } = await supabase
     .from("product_reviews")
-    .update({ is_approved: body.is_approved, updated_at: new Date().toISOString() })
+    .update({ ...update, updated_at: new Date().toISOString() })
     .eq("id", body.id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
