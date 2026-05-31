@@ -93,3 +93,12 @@ DROP POLICY IF EXISTS "own_wishlist" ON wishlists;
 CREATE POLICY "own_wishlist" ON wishlists FOR ALL
   USING (auth.uid() = customer_id)
   WITH CHECK (auth.uid() = customer_id);
+
+-- ── Blog view count: atomic increment RPC ─────────────────────────────────────
+-- Prevents race conditions when multiple users load the same post simultaneously.
+CREATE OR REPLACE FUNCTION increment_blog_view(p_slug TEXT)
+RETURNS VOID LANGUAGE SQL AS $$
+  UPDATE blog_posts
+  SET view_count = COALESCE(view_count, 0) + 1
+  WHERE slug = p_slug AND is_published = TRUE;
+$$;

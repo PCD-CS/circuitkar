@@ -4,10 +4,10 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { getPostBySlug, getRelatedPosts } from "@/lib/blog";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { RichTextRenderer } from "@/components/ui/RichTextRenderer";
 import { Badge } from "@/components/ui/Badge";
 import { ShareButtons } from "@/components/blog/ShareButtons";
+import { ViewTracker } from "@/components/blog/ViewTracker";
 
 export const dynamic = "force-dynamic";
 
@@ -42,14 +42,6 @@ export default async function BlogPostPage({
   const post = await getPostBySlug(slug);
   if (!post) notFound();
 
-  // Best-effort view count increment.
-  const admin = createAdminClient();
-  admin
-    .from("blog_posts")
-    .update({ view_count: (post.view_count ?? 0) + 1 })
-    .eq("id", post.id)
-    .then(() => {});
-
   const related = await getRelatedPosts(post.id, post.tags);
   const url = `${siteUrl}/blog/${post.slug}`;
 
@@ -71,6 +63,9 @@ export default async function BlogPostPage({
 
   return (
     <article className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+      {/* Client-side, bot-filtered, session-deduplicated view tracking */}
+      <ViewTracker slug={post.slug} />
+
       <Link
         href="/blog"
         className="mb-6 inline-flex items-center gap-1 text-sm text-[#A3A3A3] hover:text-[#F5F5F5]"
