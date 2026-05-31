@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ChevronRight, MapPin, Plus, AlertCircle, Minus, X, Tag, CheckCircle } from "lucide-react";
@@ -36,10 +36,12 @@ function OrderSummary({
   summary,
   itemCount,
   coupon,
+  couponError,
 }: {
   summary: CheckoutSummary | null;
   itemCount: number;
   coupon: AppliedCoupon | null;
+  couponError?: string;
 }) {
   const { items, updateQty, removeItem } = useCart();
 
@@ -103,6 +105,16 @@ function OrderSummary({
         ))}
       </div>
 
+      {/* Coupon removal notice — shown in sidebar so visible on both steps */}
+      {!coupon && couponError && (
+        <div className="px-5 py-2 border-t border-[#EF4444]/30 bg-[#EF4444]/5">
+          <p className="text-xs text-[#EF4444] flex items-start gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            {couponError}
+          </p>
+        </div>
+      )}
+
       {/* Totals */}
       {summary && (
         <div className="px-5 py-4 border-t border-[#262626] space-y-2 text-sm">
@@ -162,6 +174,9 @@ export default function CheckoutPage() {
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState("");
+  // Ref so the cart-change effect can read the current coupon without depending on it
+  const couponRef = useRef(coupon);
+  useEffect(() => { couponRef.current = coupon; }, [coupon]);
 
   // New address form
   const [newAddr, setNewAddr] = useState({
@@ -170,12 +185,26 @@ export default function CheckoutPage() {
   });
   const [pincodeLoading, setPincodeLoading] = useState(false);
 
-  const refreshSummary = useCallback(async () => {
-    const res = await fetch("/api/checkout", { method: "POST" });
-    if (res.ok) {
+  // Re-validate applied coupon whenever the cart subtotal changes.
+  // Recalculates discount_amount and removes coupon if it no longer qualifies.
+  const revalidateCoupon = useCallback(async (code: string, newSubtotal: number) => {
+    try {
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, subtotal: newSubtotal }),
+      });
       const data = await res.json();
-      setSummary(data);
-    }
+      if (res.ok && data.valid) {
+        // Update discount_amount for the new subtotal
+        setCoupon(data.coupon);
+        setCouponError("");
+      } else {
+        // Coupon no longer valid (min order not met, expired, etc.)
+        setCoupon(null);
+        setCouponError(data.error || "Coupon removed — cart no longer qualifies.");
+      }
+    } catch { /* ignore — coupon stays as-is on network error */ }
   }, []);
 
   useEffect(() => {
@@ -201,10 +230,20 @@ export default function CheckoutPage() {
     }).catch(() => setLoading(false));
   }, [itemCount, router]);
 
-  // Refresh summary when cart changes
+  // Refresh summary when cart changes, then re-validate any applied coupon.
+  // Uses couponRef (not coupon state) to avoid re-running when setCoupon fires.
   useEffect(() => {
-    if (!loading && itemCount > 0) refreshSummary();
-  }, [items, loading, itemCount, refreshSummary]);
+    if (!loading && itemCount > 0) {
+      fetch("/api/checkout", { method: "POST" })
+        .then(r => r.json())
+        .then(data => {
+          setSummary(data);
+          const current = couponRef.current;
+          if (current) revalidateCoupon(current.code, data.subtotal);
+        })
+        .catch(() => {});
+    }
+  }, [items, loading, itemCount, revalidateCoupon]);
 
   async function handlePincodeBlur() {
     if (newAddr.pincode.length !== 6) return;
