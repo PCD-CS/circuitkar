@@ -6,6 +6,8 @@ import { getResendClient, getEmailConfig } from "@/lib/resend";
 import { OrderConfirmationEmail } from "@/lib/emails/order-confirmation";
 import type { OrderItem, ShippingAddress, StatusHistoryEntry } from "@/types";
 
+const GST_RATE = 0.18;
+
 /** Generate order number: {PREFIX}-DDMMYY-NNNN */
 async function generateOrderNumber(supabase: ReturnType<typeof import("@supabase/supabase-js").createClient>, prefix: string): Promise<{ orderNumber: string; dailySeq: number }> {
   const now = new Date();
@@ -40,11 +42,6 @@ export async function POST(request: NextRequest) {
     razorpayPaymentId?: string;
     isTestOrder?: boolean;
     couponCode?: string;
-    discountAmount?: number;
-    subtotal: number;
-    shipping: number;
-    gst: number;
-    total: number;
   };
 
   try {
@@ -91,6 +88,52 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Recalculate totals server-side — never trust client-supplied amounts ──
+  const settings = await getSettings();
+  const freeShippingThreshold = parseInt(settings.free_shipping_threshold) || 499;
+  const shippingCharge = parseInt(settings.shipping_charge) || 100;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const subtotal = (cartItems as any[]).reduce((sum: number, item: any) => {
+    return item.product ? sum + item.product.price * item.quantity : sum;
+  }, 0);
+
+  const shipping = subtotal >= freeShippingThreshold ? 0 : shippingCharge;
+  const gst = Math.round(subtotal * GST_RATE * 100) / 100;
+
+  // Validate coupon server-side if provided
+  let discountAmount = 0;
+  if (body.couponCode) {
+    const code = body.couponCode.trim().toUpperCase();
+    const { data: coupon } = await supabase
+      .from("coupons")
+      .select("*")
+      .eq("code", code)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (coupon) {
+      const now = new Date();
+      const expired = coupon.expires_at && new Date(coupon.expires_at) < now;
+      const notStarted = coupon.starts_at && new Date(coupon.starts_at) > now;
+      const overLimit = coupon.usage_limit && coupon.usage_count >= coupon.usage_limit;
+      const underMinOrder = coupon.min_order_value && subtotal < coupon.min_order_value;
+
+      if (!expired && !notStarted && !overLimit && !underMinOrder) {
+        if (coupon.discount_type === "percentage") {
+          discountAmount = Math.round((subtotal * coupon.discount_value) / 100);
+          if (coupon.max_discount_amount) {
+            discountAmount = Math.min(discountAmount, coupon.max_discount_amount);
+          }
+        } else {
+          discountAmount = Math.min(coupon.discount_value, subtotal);
+        }
+      }
+    }
+  }
+
+  const total = Math.max(0, subtotal + shipping + gst - discountAmount);
+
   // Fetch address
   const { data: address } = await supabase
     .from("customer_addresses")
@@ -112,7 +155,6 @@ export async function POST(request: NextRequest) {
     .eq("id", customerId)
     .maybeSingle();
 
-  const settings = await getSettings();
   const prefix = settings.order_number_prefix || "CK";
 
   const { orderNumber, dailySeq } = await generateOrderNumber(supabase as unknown as ReturnType<typeof import("@supabase/supabase-js").createClient>, prefix);
@@ -152,9 +194,9 @@ export async function POST(request: NextRequest) {
       },
       address_id: body.addressId,
       items: orderItems,
-      subtotal: body.subtotal,
-      shipping_charge: body.shipping,
-      total: body.total,
+      subtotal,
+      shipping_charge: shipping,
+      total,
       gstin: body.gstin || null,
       business_name: body.businessName || null,
       status: "confirmed",
@@ -163,7 +205,7 @@ export async function POST(request: NextRequest) {
       razorpay_payment_id: body.razorpayPaymentId || null,
       is_test_order: body.isTestOrder ?? false,
       coupon_code: body.couponCode || null,
-      discount_amount: body.discountAmount || 0,
+      discount_amount: discountAmount,
       status_history: initialHistory,
     })
     .select("*")
@@ -228,9 +270,9 @@ export async function POST(request: NextRequest) {
             customerName: order.customer_name || "there",
             items: orderItems as OrderItem[],
             shippingAddress: addr,
-            subtotal: body.subtotal,
-            shipping: body.shipping,
-            total: body.total,
+            subtotal,
+            shipping,
+            total,
             siteUrl,
           }),
         });
@@ -239,8 +281,8 @@ export async function POST(request: NextRequest) {
           await resend.emails.send({
             from: emailConfig.from,
             to: emailConfig.storeEmail,
-            subject: `New order ${orderNumber}${body.isTestOrder ? " [TEST]" : ""} — ₹${body.total.toLocaleString("en-IN")}`,
-            html: `<p>New order <strong>${orderNumber}</strong> received${body.isTestOrder ? " <em>(test mode)</em>" : ""}.</p><p>Customer: ${order.customer_name} (${customerEmail})</p><p>Total: ₹${body.total.toLocaleString("en-IN")}</p><p><a href="${siteUrl}/admin/orders/${orderNumber}">View in admin →</a></p>`,
+            subject: `New order ${orderNumber}${body.isTestOrder ? " [TEST]" : ""} — ₹${total.toLocaleString("en-IN")}`,
+            html: `<p>New order <strong>${orderNumber}</strong> received${body.isTestOrder ? " <em>(test mode)</em>" : ""}.</p><p>Customer: ${order.customer_name} (${customerEmail})</p><p>Total: ₹${total.toLocaleString("en-IN")}</p><p><a href="${siteUrl}/admin/orders/${orderNumber}">View in admin →</a></p>`,
           });
         }
       }
