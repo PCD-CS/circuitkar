@@ -115,6 +115,8 @@ export function ProductForm({ product, categories }: ProductFormProps) {
   const [isActive, setIsActive] = useState(product?.is_active ?? true);
   const [stockCount, setStockCount] = useState(String(product?.stock_count ?? "0"));
   const [weightGrams, setWeightGrams] = useState(String(product?.weight_grams ?? ""));
+  const [hsnCode, setHsnCode] = useState((product as unknown as Record<string, string>)?.hsn_code ?? "");
+  const [costPrice, setCostPrice] = useState(String((product as unknown as Record<string, string>)?.cost_price ?? ""));
   const [tags, setTags] = useState((product?.tags ?? []).join(", "));
   const [datasheetUrl, setDatasheetUrl] = useState(product?.datasheet_url ?? "");
   const [images, setImages] = useState<string[]>(product?.images ?? []);
@@ -164,6 +166,8 @@ export function ProductForm({ product, categories }: ProductFormProps) {
       in_stock: inStock, is_featured: isFeatured, is_active: isActive,
       stock_count: parseInt(stockCount) || 0,
       weight_grams: weightGrams ? parseInt(weightGrams) : null,
+      hsn_code: hsnCode.trim() || null,
+      cost_price: costPrice ? parseFloat(costPrice) : null,
       tags: tags.split(",").map(t => t.trim()).filter(Boolean),
       specifications: Object.keys(specsObj).length ? specsObj : null,
       datasheet_url: datasheetUrl.trim() || null,
@@ -251,8 +255,12 @@ export function ProductForm({ product, categories }: ProductFormProps) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Input label="Price (₹) *" type="number" min="0" step="0.01" value={price} onChange={e => setPrice(e.target.value)} required placeholder="249" />
         <Input label="Compare Price (₹)" type="number" min="0" step="0.01" value={comparePrice} onChange={e => setComparePrice(e.target.value)} placeholder="299" />
+        <Input label="Cost Price (₹)" type="number" min="0" step="0.01" value={costPrice} onChange={e => setCostPrice(e.target.value)} placeholder="For margin tracking" />
         <Input label="Stock Count" type="number" min="0" value={stockCount} onChange={e => setStockCount(e.target.value)} />
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Input label="Weight (g)" type="number" min="0" value={weightGrams} onChange={e => setWeightGrams(e.target.value)} placeholder="50" />
+        <Input label="HSN Code" value={hsnCode} onChange={e => setHsnCode(e.target.value)} placeholder="85044090" />
       </div>
 
       <div className="flex flex-wrap gap-6">

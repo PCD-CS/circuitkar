@@ -2,20 +2,21 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Loader2, Search, Package } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
+import { Loader2, Search, Package, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatPrice } from "@/lib/utils";
 import type { Order } from "@/types";
 
-const STATUSES = ["", "pending", "confirmed", "shipped", "delivered", "cancelled"];
+const STATUSES = ["", "pending", "confirmed", "accepted", "packed", "shipped", "delivered", "cancelled"];
 
-const statusVariant: Record<string, "accent" | "success" | "warning" | "status"> = {
-  pending: "warning",
-  confirmed: "accent",
-  shipped: "accent",
-  delivered: "success",
-  cancelled: "status",
+const STATUS_STYLE: Record<string, string> = {
+  pending:   "text-[#F59E0B]  bg-[#F59E0B]/10  border-[#F59E0B]/40",
+  confirmed: "text-[#3B82F6]  bg-[#3B82F6]/10  border-[#3B82F6]/40",
+  accepted:  "text-[#8B5CF6]  bg-[#8B5CF6]/10  border-[#8B5CF6]/40",
+  packed:    "text-[#F97316]  bg-[#F97316]/10  border-[#F97316]/40",
+  shipped:   "text-[#06B6D4]  bg-[#06B6D4]/10  border-[#06B6D4]/40",
+  delivered: "text-[#22C55E]  bg-[#22C55E]/10  border-[#22C55E]/40",
+  cancelled: "text-[#EF4444]  bg-[#EF4444]/10  border-[#EF4444]/40",
 };
 
 export default function OrdersPage() {
@@ -102,24 +103,23 @@ export default function OrdersPage() {
             <Link
               key={o.id}
               href={`/account/orders/${o.order_number}`}
-              className="flex items-center justify-between rounded-lg border border-[#262626] bg-[#161616] px-4 py-3 transition-colors hover:border-[#525252]"
+              className="flex items-center justify-between rounded-lg border border-[#262626] bg-[#161616] px-4 py-3.5 transition-colors hover:border-[#525252] hover:bg-[#1A1A1A]"
             >
-              <div>
-                <p className="font-mono text-sm text-[#F5F5F5]">
-                  #{o.order_number}
-                </p>
-                <p className="text-xs text-[#525252]">
-                  {new Date(o.created_at).toLocaleDateString("en-IN")} ·{" "}
-                  {Array.isArray(o.items) ? o.items.length : 0} item(s)
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-mono text-sm font-semibold text-[#F5F5F5]">#{o.order_number}</p>
+                  <span className={`inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_STYLE[o.status] ?? "text-[#A3A3A3] bg-[#1E1E1E] border-[#262626]"}`}>
+                    {o.status}
+                  </span>
+                </div>
+                <p className="text-xs text-[#525252] mt-0.5">
+                  {new Date(o.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                  {" · "}{(o.items ?? []).reduce((n, it) => n + (it.qty || 0), 0)} unit(s)
                 </p>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-[#F97316]">
-                  {formatPrice(o.total)}
-                </span>
-                <Badge variant={statusVariant[o.status] ?? "category"}>
-                  {o.status}
-                </Badge>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="text-sm font-semibold text-[#F97316] font-mono">{formatPrice(o.total)}</span>
+                <ChevronRight className="h-4 w-4 text-[#525252]" />
               </div>
             </Link>
           ))}

@@ -274,11 +274,12 @@ export default function AdminProductsPage() {
                         )}
                       </div>
                       <div>
-                        <p className="font-medium text-[#F5F5F5] leading-tight">{p.name}</p>
+                        <Link href={`/admin/products/${p.id}`} className="font-medium text-[#F5F5F5] hover:text-[#F97316] leading-tight transition-colors">{p.name}</Link>
                         <p className="text-xs text-[#525252] font-mono">{p.sku ?? p.slug}</p>
                         {p.in_stock && p.stock_count > 0 && (
                           <p className="text-xs text-[#22C55E]">{p.stock_count} units</p>
                         )}
+                        {!p.in_stock && <p className="text-xs text-[#EF4444]">Out of stock</p>}
                       </div>
                     </div>
                   </td>

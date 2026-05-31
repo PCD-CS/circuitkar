@@ -8,6 +8,7 @@ import { SpecsTable } from "@/components/product/SpecsTable";
 import { NotifyCTA } from "@/components/product/NotifyCTA";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { ProductImages } from "@/components/product/ProductImages";
+import { ProductReviews } from "@/components/product/ProductReviews";
 import { RichTextRenderer } from "@/components/ui/RichTextRenderer";
 import {
   getProductBySlug,
@@ -69,25 +70,40 @@ export default async function ProductPage({
 
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in";
-  const jsonLd = {
+  const productJsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
     description: product.short_description || product.description || "",
     sku: product.sku || undefined,
-    image: product.images?.length
-      ? product.images
-      : undefined,
+    image: product.images?.length ? product.images : undefined,
     brand: { "@type": "Brand", name: "Circuitkar" },
     offers: {
       "@type": "Offer",
       url: `${siteUrl}/products/${product.slug}`,
       priceCurrency: "INR",
       price: product.price,
+      priceValidUntil: new Date(Date.now() + 30 * 864e5).toISOString().split("T")[0],
       availability: product.in_stock
         ? "https://schema.org/InStock"
-        : "https://schema.org/PreOrder",
+        : "https://schema.org/OutOfStock",
+      seller: { "@type": "Organization", name: "Circuitkar" },
     },
+  };
+
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: siteUrl },
+      { "@type": "ListItem", position: 2, name: "Products", item: `${siteUrl}/products` },
+      ...(product.category ? [{
+        "@type": "ListItem", position: 3,
+        name: product.category.name,
+        item: `${siteUrl}/category/${product.category.slug}`,
+      }] : []),
+      { "@type": "ListItem", position: product.category ? 4 : 3, name: product.name },
+    ],
   };
 
   return (
@@ -212,10 +228,11 @@ export default async function ProductPage({
         </section>
       )}
 
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      {/* Reviews */}
+      <ProductReviews productId={product.id} />
+
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
     </div>
   );
 }

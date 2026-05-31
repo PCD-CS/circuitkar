@@ -155,6 +155,28 @@ export default async function HomePage() {
           ))}
         </div>
       </section>
+
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        name: "Circuitkar",
+        url: process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in",
+        logo: `${process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in"}/logo.png`,
+        description: "India's trusted online marketplace for electronic components — microcontrollers, sensors, development boards, and maker supplies.",
+        contactPoint: { "@type": "ContactPoint", contactType: "customer support", availableLanguage: "en" },
+        sameAs: [],
+      }) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        name: "Circuitkar",
+        url: process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in",
+        potentialAction: {
+          "@type": "SearchAction",
+          target: { "@type": "EntryPoint", urlTemplate: `${process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in"}/products?q={search_term_string}` },
+          "query-input": "required name=search_term_string",
+        },
+      }) }} />
     </>
   );
 }

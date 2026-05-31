@@ -8,15 +8,35 @@ export async function GET(request: NextRequest) {
   if (!auth.ok) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
+
+  const { searchParams } = request.nextUrl;
+  const page     = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "25")));
+  const search   = searchParams.get("search")?.trim() ?? "";
+  const sortByRaw = searchParams.get("sortBy") ?? "created_at";
+  const sortDir   = searchParams.get("sortDir") === "asc";
+  const published = searchParams.get("published"); // "true" | "false" | null
+  const sortBy    = ["title", "created_at", "view_count", "published_at"].includes(sortByRaw)
+    ? sortByRaw : "created_at";
+
   const supabase = createAdminClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("blog_posts")
-    .select("*")
-    .order("created_at", { ascending: false });
+    .select("*", { count: "exact" })
+    .order(sortBy, { ascending: sortDir })
+    .range((page - 1) * pageSize, page * pageSize - 1);
+
+  if (search) {
+    query = query.or(`title.ilike.%${search}%,slug.ilike.%${search}%,excerpt.ilike.%${search}%`);
+  }
+  if (published === "true") query = query.eq("is_published", true);
+  if (published === "false") query = query.eq("is_published", false);
+
+  const { data, error, count } = await query;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ posts: data ?? [] });
+  return NextResponse.json({ posts: data ?? [], total: count ?? 0, page, pageSize });
 }
 
 export async function POST(request: NextRequest) {

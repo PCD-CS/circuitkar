@@ -39,6 +39,8 @@ export async function POST(request: NextRequest) {
     razorpayOrderId?: string;
     razorpayPaymentId?: string;
     isTestOrder?: boolean;
+    couponCode?: string;
+    discountAmount?: number;
     subtotal: number;
     shipping: number;
     gst: number;
@@ -160,6 +162,8 @@ export async function POST(request: NextRequest) {
       razorpay_order_id: body.razorpayOrderId || null,
       razorpay_payment_id: body.razorpayPaymentId || null,
       is_test_order: body.isTestOrder ?? false,
+      coupon_code: body.couponCode || null,
+      discount_amount: body.discountAmount || 0,
       status_history: initialHistory,
     })
     .select("*")
@@ -167,6 +171,16 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Increment coupon usage count (fire-and-forget)
+  if (body.couponCode) {
+    supabase.from("coupons").select("usage_count").eq("code", body.couponCode).maybeSingle()
+      .then(({ data: cp }) => {
+        if (cp !== null) {
+          supabase.from("coupons").update({ usage_count: (cp.usage_count ?? 0) + 1 }).eq("code", body.couponCode!).then(() => {});
+        }
+      });
   }
 
   // Decrement stock for each purchased product

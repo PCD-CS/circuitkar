@@ -4,11 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 
 const PAGE_SIZE = 20;
 const VALID_STATUSES = [
-  "pending",
-  "confirmed",
-  "shipped",
-  "delivered",
-  "cancelled",
+  "pending", "confirmed", "accepted", "packed", "shipped", "delivered", "cancelled",
 ];
 
 export async function GET(request: NextRequest) {

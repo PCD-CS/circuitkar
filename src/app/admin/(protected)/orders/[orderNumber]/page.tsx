@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   ChevronLeft, ExternalLink, Package, CheckCircle2, Truck, Home, XCircle,
-  Clock, ShoppingBag, Save, AlertCircle, ChevronDown, ChevronUp, TestTube2,
+  Clock, ShoppingBag, Save, AlertCircle, ChevronDown, ChevronUp, TestTube2, Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -142,12 +142,15 @@ export default function AdminOrderDetailPage() {
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <Link
-        href="/admin/orders"
-        className="inline-flex items-center gap-1 text-sm text-[#A3A3A3] hover:text-[#F5F5F5]"
-      >
-        <ChevronLeft className="h-4 w-4" /> Back to orders
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link href="/admin/orders" className="inline-flex items-center gap-1 text-sm text-[#A3A3A3] hover:text-[#F5F5F5]">
+          <ChevronLeft className="h-4 w-4" /> Back to orders
+        </Link>
+        <Link href={`/admin/orders/${order.order_number}/invoice`} target="_blank"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#262626] px-3 py-1.5 text-xs text-[#A3A3A3] hover:border-[#F97316] hover:text-[#F97316] transition-colors">
+          <Printer className="h-3.5 w-3.5" /> Print Invoice
+        </Link>
+      </div>
 
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">

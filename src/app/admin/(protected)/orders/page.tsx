@@ -2,12 +2,23 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { ShoppingCart, Search, X, Eye, ChevronLeft, ChevronRight, Download, TestTube2 } from "lucide-react";
+import { ShoppingCart, Search, X, Eye, ChevronLeft, ChevronRight, Download, TestTube2, AlertCircle } from "lucide-react";
+import { Input } from "@/components/ui/Input";
 import type { Order, OrderStatus } from "@/types";
 
 const ALL_STATUSES: OrderStatus[] = [
   "pending", "confirmed", "accepted", "packed", "shipped", "delivered", "cancelled",
 ];
+
+const VALID_TRANSITIONS: Record<string, OrderStatus[]> = {
+  pending:   ["confirmed", "cancelled"],
+  confirmed: ["accepted", "cancelled"],
+  accepted:  ["packed",    "cancelled"],
+  packed:    ["shipped",   "cancelled"],
+  shipped:   ["delivered", "cancelled"],
+  delivered: [],
+  cancelled: [],
+};
 
 const STATUS_STYLE: Record<string, string> = {
   pending:   "bg-[#F59E0B]/10 text-[#F59E0B]  border-[#F59E0B]/40",
@@ -33,6 +44,11 @@ export default function AdminOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [exportingCsv, setExportingCsv] = useState(false);
+  // Shipping modal for "packed → shipped" transition
+  const [shippingModal, setShippingModal] = useState<{ order: Order } | null>(null);
+  const [shippingCourier, setShippingCourier] = useState("");
+  const [shippingAwb, setShippingAwb] = useState("");
+  const [shippingUrl, setShippingUrl] = useState("");
 
   const pageSize = 20;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -56,13 +72,19 @@ export default function AdminOrdersPage() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  async function updateStatus(order: Order, newStatus: string) {
+  async function updateStatus(order: Order, newStatus: string, extraPayload?: Record<string, string>) {
+    // Require shipping details before marking as shipped
+    if (newStatus === "shipped" && !extraPayload) {
+      setShippingCourier(""); setShippingAwb(""); setShippingUrl("");
+      setShippingModal({ order });
+      return;
+    }
     setUpdatingId(order.id);
     try {
       const res = await fetch(`/api/admin/orders/${order.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, ...extraPayload }),
       });
       if (res.ok) {
         setOrders((prev) =>
@@ -70,6 +92,17 @@ export default function AdminOrdersPage() {
         );
       }
     } finally { setUpdatingId(null); }
+  }
+
+  async function confirmShipping() {
+    if (!shippingModal || !shippingCourier.trim() || !shippingAwb.trim()) return;
+    const extra: Record<string, string> = {
+      courier_name: shippingCourier.trim(),
+      tracking_number: shippingAwb.trim(),
+    };
+    if (shippingUrl.trim()) extra.tracking_url = shippingUrl.trim();
+    await updateStatus(shippingModal.order, "shipped", extra);
+    setShippingModal(null);
   }
 
   async function exportCsv() {
@@ -92,6 +125,36 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="space-y-6">
+      {/* Shipping modal */}
+      {shippingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShippingModal(null)} />
+          <div className="relative bg-[#161616] border border-[#262626] rounded-lg p-6 w-full max-w-md space-y-4">
+            <h3 className="text-base font-semibold text-[#F5F5F5]">Add Shipping Details</h3>
+            <p className="text-sm text-[#A3A3A3]">Required before marking order as Shipped.</p>
+            <div className="flex items-start gap-2 bg-[#F59E0B]/10 border border-[#F59E0B]/30 rounded-lg px-3 py-2">
+              <AlertCircle className="w-4 h-4 text-[#F59E0B] flex-shrink-0 mt-0.5" />
+              <span className="text-xs text-[#F59E0B]">Order: <strong>{shippingModal.order.order_number}</strong></span>
+            </div>
+            <Input label="Courier Name *" value={shippingCourier} onChange={e => setShippingCourier(e.target.value)} placeholder="DTDC, Delhivery, BlueDart…" />
+            <Input label="AWB / Tracking Number *" value={shippingAwb} onChange={e => setShippingAwb(e.target.value)} placeholder="123456789" />
+            <Input label="Tracking URL (optional)" value={shippingUrl} onChange={e => setShippingUrl(e.target.value)} placeholder="https://track.courier.com/..." />
+            <div className="flex gap-3 pt-2">
+              <button
+                disabled={!shippingCourier.trim() || !shippingAwb.trim() || !!updatingId}
+                onClick={confirmShipping}
+                className="flex-1 bg-[#F97316] text-white rounded-lg py-2.5 text-sm font-medium hover:bg-[#EA6C0A] disabled:opacity-50 disabled:pointer-events-none transition-colors"
+              >
+                {updatingId ? "Saving…" : "Mark as Shipped"}
+              </button>
+              <button onClick={() => setShippingModal(null)} className="border border-[#262626] text-[#A3A3A3] rounded-lg px-4 py-2.5 text-sm hover:text-[#F5F5F5] transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold font-mono text-[#F5F5F5]">Orders</h1>
@@ -193,11 +256,12 @@ export default function AdminOrdersPage() {
                       <div className="flex items-center justify-end gap-2">
                         <select
                           value={o.status}
-                          disabled={updatingId === o.id}
+                          disabled={updatingId === o.id || (VALID_TRANSITIONS[o.status]?.length === 0)}
                           onChange={(e) => updateStatus(o, e.target.value)}
                           className="bg-[#111111] border border-[#262626] rounded-md px-2 py-1.5 text-xs text-[#F5F5F5] focus:outline-none focus:border-[#F97316] disabled:opacity-50"
                         >
-                          {ALL_STATUSES.map((s) => (
+                          <option value={o.status}>{o.status.charAt(0).toUpperCase() + o.status.slice(1)} (current)</option>
+                          {(VALID_TRANSITIONS[o.status] ?? []).map((s) => (
                             <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
                           ))}
                         </select>

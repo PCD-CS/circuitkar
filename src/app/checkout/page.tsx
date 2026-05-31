@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { ChevronRight, MapPin, Plus, AlertCircle, Minus, X } from "lucide-react";
+import { ChevronRight, MapPin, Plus, AlertCircle, Minus, X, Tag, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useCart } from "@/lib/cart-context";
@@ -23,13 +23,23 @@ interface CheckoutSummary {
   launchMode: string;
 }
 
+interface AppliedCoupon {
+  code: string;
+  description: string | null;
+  discount_type: string;
+  discount_value: number;
+  discount_amount: number;
+}
+
 /* ── Order Summary sidebar — shows on both steps ── */
 function OrderSummary({
   summary,
   itemCount,
+  coupon,
 }: {
   summary: CheckoutSummary | null;
   itemCount: number;
+  coupon: AppliedCoupon | null;
 }) {
   const { items, updateQty, removeItem } = useCart();
 
@@ -100,6 +110,12 @@ function OrderSummary({
             <span>Subtotal</span>
             <span>₹{summary.subtotal.toLocaleString("en-IN")}</span>
           </div>
+          {coupon && (
+            <div className="flex justify-between text-[#22C55E]">
+              <span className="flex items-center gap-1"><Tag className="w-3 h-3" />{coupon.code}</span>
+              <span>−₹{coupon.discount_amount.toLocaleString("en-IN")}</span>
+            </div>
+          )}
           <div className="flex justify-between text-[#A3A3A3]">
             <span>Shipping</span>
             <span className={summary.shipping === 0 ? "text-[#22C55E]" : ""}>
@@ -113,7 +129,7 @@ function OrderSummary({
           <div className="flex justify-between font-bold text-[#F5F5F5] pt-2 border-t border-[#262626]">
             <span>Total</span>
             <span className="text-[#F97316] font-mono">
-              ₹{summary.total.toLocaleString("en-IN")}
+              ₹{Math.max(0, summary.total - (coupon?.discount_amount ?? 0)).toLocaleString("en-IN")}
             </span>
           </div>
         </div>
@@ -140,6 +156,12 @@ export default function CheckoutPage() {
   const [gstin, setGstin] = useState("");
   const [gstinError, setGstinError] = useState("");
   const [businessName, setBusinessName] = useState("");
+
+  // Coupon
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponError, setCouponError] = useState("");
 
   // New address form
   const [newAddr, setNewAddr] = useState({
@@ -216,6 +238,26 @@ export default function CheckoutPage() {
     return { id: data.address.id, addr: data.address };
   }
 
+  async function applyCoupon() {
+    if (!couponInput.trim()) return;
+    setCouponLoading(true); setCouponError("");
+    try {
+      const res = await fetch("/api/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: couponInput.trim().toUpperCase(), subtotal: summary?.subtotal ?? 0 }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCoupon(data.coupon);
+        setCouponInput("");
+      } else {
+        setCouponError(data.error || "Invalid coupon.");
+      }
+    } catch { setCouponError("Could not apply coupon. Try again."); }
+    setCouponLoading(false);
+  }
+
   async function saveGstToProfile() {
     if (!wantGst || !gstin || !isValidGSTIN(gstin)) return;
     try {
@@ -263,7 +305,7 @@ export default function CheckoutPage() {
         const rzpRes = await fetch("/api/razorpay/create-order", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ amount: summary.total, receipt: `order_${Date.now()}` }),
+          body: JSON.stringify({ amount: effectiveTotal(summary), receipt: `order_${Date.now()}` }),
         });
         const rzpData = await rzpRes.json();
         if (!rzpRes.ok) {
@@ -323,6 +365,9 @@ export default function CheckoutPage() {
     }
   }
 
+  const effectiveTotal = (sum: CheckoutSummary) =>
+    Math.max(0, sum.total - (coupon?.discount_amount ?? 0));
+
   async function createOrder(rzpOrderId: string, rzpPaymentId: string, keyId: string, sum: CheckoutSummary) {
     const res = await fetch("/api/orders/create", {
       method: "POST",
@@ -334,7 +379,10 @@ export default function CheckoutPage() {
         razorpayOrderId: rzpOrderId,
         razorpayPaymentId: rzpPaymentId,
         isTestOrder: keyId.startsWith("rzp_test_"),
-        subtotal: sum.subtotal, shipping: sum.shipping, gst: sum.gst, total: sum.total,
+        couponCode: coupon?.code ?? undefined,
+        discountAmount: coupon?.discount_amount ?? 0,
+        subtotal: sum.subtotal, shipping: sum.shipping, gst: sum.gst,
+        total: effectiveTotal(sum),
       }),
     });
     const data = await res.json();
@@ -544,6 +592,40 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
+                {/* Coupon */}
+                <div className="bg-[#161616] border border-[#262626] rounded-lg p-4">
+                  {coupon ? (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-[#22C55E]" />
+                        <div>
+                          <p className="text-sm font-mono font-bold text-[#22C55E]">{coupon.code}</p>
+                          {coupon.description && <p className="text-xs text-[#525252]">{coupon.description}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-[#22C55E]">−₹{coupon.discount_amount.toLocaleString("en-IN")}</span>
+                        <button onClick={() => setCoupon(null)} className="text-[#525252] hover:text-[#EF4444]"><X className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-xs font-mono text-[#525252] uppercase tracking-wider mb-2">Coupon Code</p>
+                      <div className="flex gap-2">
+                        <input
+                          value={couponInput}
+                          onChange={e => { setCouponInput(e.target.value.toUpperCase()); setCouponError(""); }}
+                          onKeyDown={e => e.key === "Enter" && applyCoupon()}
+                          placeholder="Enter coupon code"
+                          className="flex-1 bg-[#111111] border border-[#262626] rounded-lg px-3 py-2 text-sm text-[#F5F5F5] placeholder:text-[#525252] focus:outline-none focus:border-[#F97316] font-mono"
+                        />
+                        <Button variant="secondary" size="sm" loading={couponLoading} onClick={applyCoupon}>Apply</Button>
+                      </div>
+                      {couponError && <p className="text-xs text-[#EF4444] mt-1.5">{couponError}</p>}
+                    </div>
+                  )}
+                </div>
+
                 {/* Payment */}
                 {summary.launchMode !== "live" ? (
                   <div className="bg-[#F97316]/10 border border-[#F97316]/30 rounded-lg p-5 text-center">
@@ -558,7 +640,7 @@ export default function CheckoutPage() {
                       <span>Secure payment via Razorpay — UPI, Cards, Net Banking, Wallets accepted</span>
                     </div>
                     <Button onClick={handlePlaceOrder} loading={placing} className="w-full" size="lg">
-                      Pay ₹{summary.total.toLocaleString("en-IN")} with Razorpay
+                      Pay ₹{effectiveTotal(summary).toLocaleString("en-IN")} with Razorpay
                     </Button>
                   </div>
                 )}
@@ -568,7 +650,7 @@ export default function CheckoutPage() {
 
           {/* Right: order summary — always visible */}
           <div className="lg:col-span-2">
-            <OrderSummary summary={summary} itemCount={itemCount} />
+            <OrderSummary summary={summary} itemCount={itemCount} coupon={coupon} />
           </div>
         </div>
       </div>

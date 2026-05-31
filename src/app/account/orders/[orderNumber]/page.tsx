@@ -1,28 +1,32 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ExternalLink, MessageCircle } from "lucide-react";
+import { ChevronLeft, ExternalLink, MessageCircle, CheckCircle2, Truck, Package, Home, ShoppingBag } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Badge } from "@/components/ui/Badge";
 import { formatPrice } from "@/lib/utils";
 import { getSettings } from "@/lib/settings";
 import type { Order, OrderItem, ShippingAddress } from "@/types";
 
 export const dynamic = "force-dynamic";
 
-const TIMELINE: { key: Order["status"]; label: string }[] = [
-  { key: "pending", label: "Order Placed" },
-  { key: "confirmed", label: "Confirmed" },
-  { key: "shipped", label: "Shipped" },
-  { key: "delivered", label: "Delivered" },
+const TIMELINE: { key: Order["status"]; label: string; icon: React.ElementType }[] = [
+  { key: "confirmed",  label: "Order Confirmed", icon: CheckCircle2 },
+  { key: "accepted",   label: "Accepted",         icon: ShoppingBag },
+  { key: "packed",     label: "Packed",            icon: Package },
+  { key: "shipped",    label: "Shipped",           icon: Truck },
+  { key: "delivered",  label: "Delivered",         icon: Home },
 ];
 
-const statusVariant: Record<string, "accent" | "success" | "warning" | "status"> = {
-  pending: "warning",
-  confirmed: "accent",
-  shipped: "accent",
-  delivered: "success",
-  cancelled: "status",
+const STATUS_ORDER = ["confirmed", "accepted", "packed", "shipped", "delivered"];
+
+const STATUS_COLORS: Record<string, string> = {
+  confirmed: "text-[#3B82F6] bg-[#3B82F6]/10 border-[#3B82F6]/30",
+  accepted:  "text-[#8B5CF6] bg-[#8B5CF6]/10 border-[#8B5CF6]/30",
+  packed:    "text-[#F97316] bg-[#F97316]/10 border-[#F97316]/30",
+  shipped:   "text-[#06B6D4] bg-[#06B6D4]/10 border-[#06B6D4]/30",
+  delivered: "text-[#22C55E] bg-[#22C55E]/10 border-[#22C55E]/30",
+  cancelled: "text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/30",
+  pending:   "text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/30",
 };
 
 export default async function OrderDetailPage({
@@ -48,8 +52,9 @@ export default async function OrderDetailPage({
   const order = data as Order;
   const items = (order.items ?? []) as OrderItem[];
   const addr = order.shipping_address as ShippingAddress;
-  const currentIndex = TIMELINE.findIndex((t) => t.key === order.status);
   const cancelled = order.status === "cancelled";
+  const currentStatusIndex = STATUS_ORDER.indexOf(order.status);
+  const discount = (order as unknown as Record<string, number>).discount_amount ?? 0;
 
   const settings = await getSettings();
   const waHref = `https://wa.me/${settings.whatsapp_number}?text=${encodeURIComponent(
@@ -74,35 +79,41 @@ export default async function OrderDetailPage({
             Placed on {new Date(order.created_at).toLocaleDateString("en-IN")}
           </p>
         </div>
-        <Badge variant={statusVariant[order.status] ?? "category"}>
+        <span className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium capitalize ${STATUS_COLORS[order.status] ?? "text-[#A3A3A3] bg-[#1E1E1E] border-[#262626]"}`}>
           {order.status}
-        </Badge>
+        </span>
       </div>
 
       {/* Timeline */}
-      {!cancelled && (
+      {cancelled ? (
+        <div className="rounded-lg border border-[#EF4444]/30 bg-[#EF4444]/10 p-4 text-sm text-[#EF4444]">
+          This order was cancelled. {order.payment_status === "refunded" ? "Your refund has been processed." : "If payment was made, a refund will be processed within 5–7 business days."}
+        </div>
+      ) : (
         <div className="rounded-lg border border-[#262626] bg-[#161616] p-5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center">
             {TIMELINE.map((step, i) => {
-              const done = i <= currentIndex;
+              const stepIndex = STATUS_ORDER.indexOf(step.key);
+              const done = stepIndex <= currentStatusIndex;
+              const isCurrent = step.key === order.status;
+              const Icon = done ? CheckCircle2 : step.icon;
               return (
-                <div key={step.key} className="flex flex-1 flex-col items-center">
-                  <div
-                    className={`flex h-7 w-7 items-center justify-center rounded-full text-xs ${
-                      done
-                        ? "bg-[#F97316] text-white"
-                        : "bg-[#262626] text-[#525252]"
-                    }`}
-                  >
-                    {i + 1}
+                <div key={step.key} className="flex flex-1 items-center">
+                  <div className="flex flex-col items-center flex-shrink-0">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors ${
+                      isCurrent ? "border-[#F97316] bg-[#F97316]/15 text-[#F97316]"
+                      : done ? "border-[#22C55E] bg-[#22C55E]/15 text-[#22C55E]"
+                      : "border-[#262626] bg-[#1A1A1A] text-[#525252]"
+                    }`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <span className={`mt-1 text-center text-[10px] leading-tight max-w-[56px] ${isCurrent ? "text-[#F97316] font-medium" : done ? "text-[#A3A3A3]" : "text-[#525252]"}`}>
+                      {step.label}
+                    </span>
                   </div>
-                  <span
-                    className={`mt-1.5 text-center text-[10px] ${
-                      done ? "text-[#F5F5F5]" : "text-[#525252]"
-                    }`}
-                  >
-                    {step.label}
-                  </span>
+                  {i < TIMELINE.length - 1 && (
+                    <div className={`flex-1 h-0.5 mx-1 ${stepIndex < currentStatusIndex ? "bg-[#22C55E]/50" : "bg-[#262626]"}`} />
+                  )}
                 </div>
               );
             })}
@@ -128,16 +139,16 @@ export default async function OrderDetailPage({
         </div>
         <div className="mt-3 space-y-1 border-t border-[#262626] pt-3 text-sm">
           <div className="flex justify-between text-[#A3A3A3]">
-            <span>Subtotal</span>
-            <span>{formatPrice(order.subtotal)}</span>
+            <span>Subtotal</span><span>{formatPrice(order.subtotal)}</span>
           </div>
+          {discount > 0 && (
+            <div className="flex justify-between text-[#22C55E]">
+              <span>Discount</span><span>−{formatPrice(discount)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-[#A3A3A3]">
             <span>Shipping</span>
-            <span>
-              {Number(order.shipping_charge) === 0
-                ? "Free"
-                : formatPrice(order.shipping_charge)}
-            </span>
+            <span>{Number(order.shipping_charge) === 0 ? "Free" : formatPrice(order.shipping_charge)}</span>
           </div>
           <div className="flex justify-between pt-1 text-base font-semibold">
             <span className="text-[#F5F5F5]">Total</span>
@@ -165,33 +176,28 @@ export default async function OrderDetailPage({
         </div>
 
         <div className="rounded-lg border border-[#262626] bg-[#161616] p-5">
-          <h3 className="mb-2 text-sm font-semibold text-[#F5F5F5]">
-            Tracking &amp; GST
-          </h3>
-          {order.shiprocket_tracking ? (
+          <h3 className="mb-2 text-sm font-semibold text-[#F5F5F5]">Shipment &amp; Payment</h3>
+          {(order.tracking_url || order.shiprocket_tracking) ? (
             <a
-              href={order.shiprocket_tracking}
-              target="_blank"
-              rel="noopener noreferrer"
+              href={order.tracking_url || order.shiprocket_tracking || "#"}
+              target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-sm text-[#F97316] hover:text-[#EA6C0A]"
             >
-              Track shipment <ExternalLink className="h-3.5 w-3.5" />
+              <Truck className="h-3.5 w-3.5" /> Track Shipment <ExternalLink className="h-3.5 w-3.5" />
             </a>
           ) : (
-            <p className="text-sm text-[#525252]">
-              Tracking will appear once shipped.
-            </p>
+            <p className="text-sm text-[#525252]">Tracking will appear once shipped.</p>
           )}
+          {order.courier_name && <p className="text-xs text-[#A3A3A3] mt-1">Courier: {order.courier_name}</p>}
+          {order.tracking_number && <p className="text-xs font-mono text-[#F97316] mt-0.5">AWB: {order.tracking_number}</p>}
           {order.gstin && (
-            <p className="mt-2 text-xs text-[#A3A3A3]">
-              GSTIN: <span className="font-mono">{order.gstin}</span>
-            </p>
-          )}
-          {order.business_name && (
-            <p className="text-xs text-[#A3A3A3]">{order.business_name}</p>
+            <div className="mt-2 pt-2 border-t border-[#262626]">
+              <p className="text-xs text-[#A3A3A3]">GSTIN: <span className="font-mono">{order.gstin}</span></p>
+              {order.business_name && <p className="text-xs text-[#A3A3A3]">{order.business_name}</p>}
+            </div>
           )}
           <p className="mt-2 text-xs text-[#525252]">
-            Payment: {order.payment_status}
+            Payment: <span className={order.payment_status === "paid" ? "text-[#22C55E]" : "text-[#F59E0B]"}>{order.payment_status}</span>
           </p>
         </div>
       </div>

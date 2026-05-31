@@ -1,17 +1,25 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "@/lib/auth";
+import { getResendClient, getEmailConfig } from "@/lib/resend";
+import { ShippingConfirmationEmail } from "@/lib/emails/shipping-confirmation";
+import { OrderCancelledEmail } from "@/lib/emails/order-cancelled";
 import type { StatusHistoryEntry } from "@/types";
 
 const VALID_STATUSES = [
-  "pending",
-  "confirmed",
-  "accepted",
-  "packed",
-  "shipped",
-  "delivered",
-  "cancelled",
+  "pending", "confirmed", "accepted", "packed", "shipped", "delivered", "cancelled",
 ];
+
+// Forward-only transitions. Cancellation is always allowed from admin.
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  pending:   ["confirmed", "cancelled"],
+  confirmed: ["accepted", "cancelled"],
+  accepted:  ["packed",    "cancelled"],
+  packed:    ["shipped",   "cancelled"],
+  shipped:   ["delivered", "cancelled"],
+  delivered: [], // terminal
+  cancelled: [], // terminal
+};
 
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -64,6 +72,8 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid status." }, { status: 400 });
   }
 
+  // Enforce forward-only transitions (checked after fetching current order below)
+
   const supabase = createAdminClient();
   const column = isUuid(id) ? "id" : "order_number";
 
@@ -75,6 +85,16 @@ export async function PATCH(
     .maybeSingle();
 
   if (!current) return NextResponse.json({ error: "Order not found." }, { status: 404 });
+
+  // Validate forward-only transition
+  if (body.status && body.status !== current.status) {
+    const allowed = VALID_TRANSITIONS[current.status] ?? [];
+    if (!allowed.includes(body.status)) {
+      return NextResponse.json({
+        error: `Cannot change status from "${current.status}" to "${body.status}". Order flow is forward-only.`,
+      }, { status: 400 });
+    }
+  }
 
   const now = new Date().toISOString();
   const update: Record<string, unknown> = { updated_at: now };
@@ -142,6 +162,53 @@ export async function PATCH(
         }).then(() => {});
       }
     }
+  }
+
+  // Send customer emails on key status changes
+  if (body.status && body.status !== current.status && data) {
+    try {
+      const emailConfig = await getEmailConfig();
+      const resend = await getResendClient();
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in";
+      if (resend && data.customer_email && emailConfig.sendOrderEmails) {
+        if (body.status === "shipped") {
+          await resend.emails.send({
+            from: emailConfig.from,
+            to: data.customer_email,
+            subject: `Order #${data.order_number} shipped — Circuitkar`,
+            react: ShippingConfirmationEmail({
+              orderNumber: data.order_number,
+              customerName: data.customer_name || "there",
+              courierName: body.courier_name ?? data.courier_name ?? undefined,
+              trackingNumber: body.tracking_number ?? data.tracking_number ?? undefined,
+              trackingUrl: body.tracking_url ?? data.tracking_url ?? undefined,
+              siteUrl,
+            }),
+          });
+        }
+        if (body.status === "cancelled") {
+          await resend.emails.send({
+            from: emailConfig.from,
+            to: data.customer_email,
+            subject: `Order #${data.order_number} cancelled — Circuitkar`,
+            react: OrderCancelledEmail({
+              orderNumber: data.order_number,
+              customerName: data.customer_name || "there",
+              reason: body.note ?? undefined,
+              siteUrl,
+            }),
+          });
+        }
+        if (body.status === "delivered") {
+          await resend.emails.send({
+            from: emailConfig.from,
+            to: data.customer_email,
+            subject: `Order #${data.order_number} delivered — Circuitkar`,
+            html: `<p>Hi ${data.customer_name || "there"},</p><p>Your order <strong>#${data.order_number}</strong> has been delivered. Enjoy your components!</p><p>If anything is wrong, contact us within 48 hours.</p>`,
+          });
+        }
+      }
+    } catch (e) { console.error("Status email error", e); }
   }
 
   return NextResponse.json({ order: data });

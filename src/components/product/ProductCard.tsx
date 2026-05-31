@@ -1,9 +1,9 @@
 "use client";
 
-import { Bell, ShoppingCart } from "lucide-react";
+import { Bell, ShoppingCart, Heart } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { OutOfStockBadge } from "./OutOfStockBadge";
@@ -18,6 +18,8 @@ export function ProductCard({ product }: { product: ProductWithCategory }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [count, setCount] = useState(product.interest_count);
   const [addingToCart, setAddingToCart] = useState(false);
+  const [wishlisted, setWishlisted] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
   const Icon = getCategoryIcon(product.category?.icon);
   const image = product.images?.[0];
   const { launchMode } = useSiteConfig();
@@ -25,10 +27,52 @@ export function ProductCard({ product }: { product: ProductWithCategory }) {
 
   const canBuy = product.in_stock && launchMode === "live";
 
+  // Check wishlist status on mount
+  useEffect(() => {
+    fetch("/api/account/wishlist")
+      .then((r) => {
+        if (!r.ok) return null;
+        return r.json();
+      })
+      .then((data) => {
+        if (!data) return;
+        const items: Array<{ product_id: string }> = data.items ?? [];
+        setWishlisted(items.some((i) => i.product_id === product.id));
+      })
+      .catch(() => {});
+  }, [product.id]);
+
   async function handleAddToCart() {
     setAddingToCart(true);
     await addItem(product.id, 1);
     setAddingToCart(false);
+  }
+
+  async function toggleWishlist(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (wishlistLoading) return;
+    setWishlistLoading(true);
+    try {
+      if (wishlisted) {
+        const res = await fetch(
+          `/api/account/wishlist?productId=${product.id}`,
+          { method: "DELETE" },
+        );
+        if (res.ok) setWishlisted(false);
+        else if (res.status === 401) window.location.href = "/auth/login";
+      } else {
+        const res = await fetch("/api/account/wishlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId: product.id }),
+        });
+        if (res.ok) setWishlisted(true);
+        else if (res.status === 401) window.location.href = "/auth/login";
+      }
+    } finally {
+      setWishlistLoading(false);
+    }
   }
 
   return (
@@ -56,6 +100,21 @@ export function ProductCard({ product }: { product: ProductWithCategory }) {
               <Badge variant="category">{product.category.name}</Badge>
             </div>
           )}
+          {/* Wishlist heart button */}
+          <button
+            onClick={toggleWishlist}
+            disabled={wishlistLoading}
+            aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+            className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#0A0A0A]/70 text-[#A3A3A3] opacity-0 backdrop-blur-sm transition-all group-hover:opacity-100 hover:bg-[#0A0A0A]/90 disabled:cursor-not-allowed"
+          >
+            <Heart
+              className={`h-4 w-4 transition-colors ${
+                wishlisted
+                  ? "fill-[#EF4444] text-[#EF4444]"
+                  : "hover:text-[#EF4444]"
+              }`}
+            />
+          </button>
         </Link>
 
         <div className="flex flex-1 flex-col p-4">

@@ -15,6 +15,10 @@ import {
   Menu,
   X,
   Cpu,
+  MessageSquare,
+  Tag,
+  Warehouse,
+  Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -25,7 +29,11 @@ const navItems = [
   { href: "/admin/blog", label: "Blog", icon: FileText },
   { href: "/admin/interests", label: "Interests", icon: Bell },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
+  { href: "/admin/customers", label: "Customers", icon: Users },
+  { href: "/admin/inventory", label: "Inventory", icon: Warehouse },
   { href: "/admin/invoices", label: "Invoices", icon: Receipt },
+  { href: "/admin/reviews", label: "Reviews", icon: MessageSquare },
+  { href: "/admin/coupons", label: "Coupons", icon: Tag },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
