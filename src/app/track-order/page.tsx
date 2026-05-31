@@ -2,19 +2,29 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Package, Search, CheckCircle, Truck, Clock, XCircle } from "lucide-react";
+import { Package, Search, CheckCircle, Truck, Clock, XCircle, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  pending: { label: "Pending", icon: Clock, color: "text-[#F59E0B]" },
-  confirmed: { label: "Confirmed", icon: CheckCircle, color: "text-[#22C55E]" },
-  shipped: { label: "Shipped", icon: Truck, color: "text-[#F97316]" },
-  delivered: { label: "Delivered", icon: CheckCircle, color: "text-[#22C55E]" },
-  cancelled: { label: "Cancelled", icon: XCircle, color: "text-[#EF4444]" },
+  pending:   { label: "Pending",   icon: Clock,        color: "text-[#F59E0B]" },
+  confirmed: { label: "Confirmed", icon: CheckCircle,  color: "text-[#3B82F6]" },
+  accepted:  { label: "Accepted",  icon: ShoppingBag,  color: "text-[#8B5CF6]" },
+  packed:    { label: "Packed",    icon: Package,      color: "text-[#F97316]" },
+  shipped:   { label: "Shipped",   icon: Truck,        color: "text-[#06B6D4]" },
+  delivered: { label: "Delivered", icon: CheckCircle,  color: "text-[#22C55E]" },
+  cancelled: { label: "Cancelled", icon: XCircle,      color: "text-[#EF4444]" },
 };
 
-const TIMELINE_STEPS = ["confirmed", "shipped", "delivered"];
+// Full forward-order timeline shown to customers
+const TIMELINE_STEPS = ["confirmed", "accepted", "packed", "shipped", "delivered"];
+const TIMELINE_LABELS: Record<string, string> = {
+  confirmed: "Confirmed",
+  accepted:  "Accepted",
+  packed:    "Packed",
+  shipped:   "Shipped",
+  delivered: "Delivered",
+};
 
 interface TrackedOrder {
   order_number: string;
@@ -28,6 +38,9 @@ interface TrackedOrder {
   shipping_charge: number;
   total: number;
   shiprocket_tracking: string | null;
+  courier_name: string | null;
+  tracking_number: string | null;
+  tracking_url: string | null;
   created_at: string;
 }
 
@@ -37,6 +50,7 @@ export default function TrackOrderPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [order, setOrder] = useState<TrackedOrder | null>(null);
+  const [whatsappNumber, setWhatsappNumber] = useState("");
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -45,6 +59,7 @@ export default function TrackOrderPage() {
     const data = await res.json();
     if (res.ok) {
       setOrder(data.order);
+      setWhatsappNumber(data.whatsappNumber ?? "");
     } else {
       setError(data.error || "Order not found. Please check your details.");
     }
@@ -52,6 +67,9 @@ export default function TrackOrderPage() {
   }
 
   const currentStepIndex = order ? TIMELINE_STEPS.indexOf(order.status) : -1;
+  const waHref = whatsappNumber
+    ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(`Hi Circuitkar, I have a query about order #${order?.order_number}`)}`
+    : undefined;
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] py-16 px-4">
@@ -70,7 +88,7 @@ export default function TrackOrderPage() {
               label="Order Number"
               value={orderNumber}
               onChange={e => setOrderNumber(e.target.value.toUpperCase())}
-              placeholder="CK-ABC123-XY9Z"
+              placeholder="CK-310526-0001"
               required
             />
             <Input
@@ -92,15 +110,18 @@ export default function TrackOrderPage() {
 
         {order && (
           <div className="space-y-4">
-            {/* Status */}
+            {/* Status header */}
             <div className="bg-[#161616] border border-[#262626] rounded-lg p-5">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-5">
                 <div>
                   <p className="text-xs text-[#525252] font-mono">Order</p>
                   <p className="text-lg font-mono font-bold text-[#F97316]">{order.order_number}</p>
+                  <p className="text-xs text-[#525252] mt-0.5">
+                    Placed {new Date(order.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                  </p>
                 </div>
                 {(() => {
-                  const cfg = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending;
+                  const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending;
                   const Icon = cfg.icon;
                   return (
                     <div className="flex items-center gap-2">
@@ -111,44 +132,71 @@ export default function TrackOrderPage() {
                 })()}
               </div>
 
-              {/* Timeline */}
+              {/* Full timeline */}
               {order.status !== "cancelled" && (
-                <div className="flex items-center gap-2 mt-4">
-                  {TIMELINE_STEPS.map((step, i) => {
-                    const done = i <= currentStepIndex;
-                    const active = i === currentStepIndex;
-                    return (
-                      <div key={step} className="flex items-center flex-1">
-                        <div className={`w-3 h-3 rounded-full flex-shrink-0 border-2 transition-colors ${
-                          done ? "bg-[#F97316] border-[#F97316]" : active ? "border-[#F97316]" : "border-[#525252]"
-                        }`} />
-                        {i < TIMELINE_STEPS.length - 1 && (
-                          <div className={`flex-1 h-0.5 ${done && i < currentStepIndex ? "bg-[#F97316]" : "bg-[#262626]"}`} />
-                        )}
-                      </div>
-                    );
-                  })}
+                <>
+                  <div className="flex items-center">
+                    {TIMELINE_STEPS.map((step, i) => {
+                      const done = currentStepIndex >= i;
+                      const active = currentStepIndex === i;
+                      return (
+                        <div key={step} className="flex items-center flex-1">
+                          <div className={`w-3 h-3 rounded-full flex-shrink-0 border-2 transition-colors ${
+                            done
+                              ? active
+                                ? "bg-[#F97316] border-[#F97316]"
+                                : "bg-[#22C55E] border-[#22C55E]"
+                              : "bg-[#0A0A0A] border-[#525252]"
+                          }`} />
+                          {i < TIMELINE_STEPS.length - 1 && (
+                            <div className={`flex-1 h-0.5 ${done && currentStepIndex > i ? "bg-[#22C55E]" : "bg-[#262626]"}`} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-between mt-1.5">
+                    {TIMELINE_STEPS.map(step => (
+                      <span key={step} className={`text-[10px] ${TIMELINE_STEPS.indexOf(step) <= currentStepIndex ? "text-[#A3A3A3]" : "text-[#525252]"}`}>
+                        {TIMELINE_LABELS[step]}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {order.status === "cancelled" && (
+                <div className="mt-3 text-sm text-[#EF4444] bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-lg px-4 py-3">
+                  This order has been cancelled.
                 </div>
               )}
-              <div className="flex justify-between mt-1">
-                {TIMELINE_STEPS.map(step => (
-                  <span key={step} className="text-xs text-[#525252] capitalize">{step}</span>
-                ))}
-              </div>
             </div>
 
-            {/* Tracking */}
-            {order.shiprocket_tracking && (
+            {/* Tracking info */}
+            {(order.shiprocket_tracking || order.tracking_number) && (
               <div className="bg-[#161616] border border-[#262626] rounded-lg p-5">
-                <p className="text-xs font-mono text-[#525252] uppercase tracking-wider mb-2">Tracking ID</p>
-                <p className="font-mono text-sm text-[#F5F5F5] mb-3">{order.shiprocket_tracking}</p>
-                <a
-                  href={`https://shiprocket.co/tracking/${order.shiprocket_tracking}`}
-                  target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-[#F97316] hover:underline"
-                >
-                  Track on Shiprocket →
-                </a>
+                <p className="text-xs font-mono text-[#525252] uppercase tracking-wider mb-2">Shipment</p>
+                {order.courier_name && (
+                  <p className="text-sm text-[#A3A3A3] mb-1">Courier: <span className="text-[#F5F5F5]">{order.courier_name}</span></p>
+                )}
+                {(order.tracking_number || order.shiprocket_tracking) && (
+                  <p className="font-mono text-sm text-[#F5F5F5] mb-3">
+                    Tracking: {order.tracking_number || order.shiprocket_tracking}
+                  </p>
+                )}
+                {order.tracking_url ? (
+                  <a href={order.tracking_url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#F97316] hover:underline">
+                    Track shipment →
+                  </a>
+                ) : order.shiprocket_tracking ? (
+                  <a
+                    href={`https://shiprocket.co/tracking/${order.shiprocket_tracking}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-[#F97316] hover:underline"
+                  >
+                    Track on Shiprocket →
+                  </a>
+                ) : null}
               </div>
             )}
 
@@ -169,15 +217,17 @@ export default function TrackOrderPage() {
               </div>
             </div>
 
-            <div className="text-center">
-              <Link
-                href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER}?text=Hi, query about order ${order.order_number}`}
-                target="_blank" rel="noopener noreferrer"
-                className="text-sm text-[#F97316] hover:underline"
-              >
-                Need help? WhatsApp us about this order →
-              </Link>
-            </div>
+            {waHref && (
+              <div className="text-center">
+                <Link
+                  href={waHref}
+                  target="_blank" rel="noopener noreferrer"
+                  className="text-sm text-[#F97316] hover:underline"
+                >
+                  Need help? WhatsApp us about this order →
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </div>

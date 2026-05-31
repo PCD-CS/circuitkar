@@ -31,6 +31,54 @@ interface AppliedCoupon {
   discount_amount: number;
 }
 
+/* ── Per-item qty control with local state to avoid stale-closure issues ── */
+function ItemQtyControl({ item, updateQty, removeItem }: {
+  item: import("@/types").CartItemWithProduct;
+  updateQty: (id: string, qty: number) => void;
+  removeItem: (id: string) => Promise<void>;
+}) {
+  const [localQty, setLocalQty] = useState(item.quantity);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInteracting = useRef(false);
+
+  useEffect(() => {
+    if (!isInteracting.current) setLocalQty(item.quantity);
+  }, [item.quantity]);
+
+  function step(delta: -1 | 1) {
+    if (delta === -1 && localQty <= 1) { removeItem(item.id); return; }
+    setLocalQty(prev => {
+      const next = Math.max(1, prev + delta);
+      updateQty(item.id, next);
+      return next;
+    });
+    isInteracting.current = true;
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(() => { isInteracting.current = false; }, 1200);
+  }
+
+  const maxStock = item.product.in_stock && item.product.stock_count > 0 ? item.product.stock_count : 99;
+
+  return (
+    <div className="flex items-center gap-1 mt-1.5">
+      <button
+        onClick={() => step(-1)}
+        className="w-6 h-6 rounded border border-[#262626] flex items-center justify-center text-[#A3A3A3] hover:border-[#F97316] hover:text-[#F97316] transition-colors"
+      >
+        {localQty === 1 ? <X className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
+      </button>
+      <span className="w-6 text-center text-xs text-[#F5F5F5] font-mono">{localQty}</span>
+      <button
+        onClick={() => step(1)}
+        disabled={localQty >= maxStock}
+        className="w-6 h-6 rounded border border-[#262626] flex items-center justify-center text-[#A3A3A3] hover:border-[#F97316] hover:text-[#F97316] transition-colors disabled:opacity-40 disabled:pointer-events-none"
+      >
+        <Plus className="w-3 h-3" />
+      </button>
+    </div>
+  );
+}
+
 /* ── Order Summary sidebar — shows on both steps ── */
 function OrderSummary({
   summary,
@@ -77,29 +125,7 @@ function OrderSummary({
               <p className="text-xs text-[#F97316] font-mono font-semibold mt-0.5">
                 ₹{(item.product.price * item.quantity).toLocaleString("en-IN")}
               </p>
-              {/* Qty controls */}
-              <div className="flex items-center gap-1 mt-1.5">
-                <button
-                  onClick={() =>
-                    item.quantity > 1
-                      ? updateQty(item.id, item.quantity - 1)
-                      : removeItem(item.id)
-                  }
-                  className="w-6 h-6 rounded border border-[#262626] flex items-center justify-center text-[#A3A3A3] hover:border-[#F97316] hover:text-[#F97316] transition-colors"
-                >
-                  {item.quantity === 1 ? <X className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
-                </button>
-                <span className="w-6 text-center text-xs text-[#F5F5F5] font-mono">
-                  {item.quantity}
-                </span>
-                <button
-                  onClick={() => updateQty(item.id, item.quantity + 1)}
-                  disabled={item.product.in_stock && item.product.stock_count > 0 ? item.quantity >= item.product.stock_count : false}
-                  className="w-6 h-6 rounded border border-[#262626] flex items-center justify-center text-[#A3A3A3] hover:border-[#F97316] hover:text-[#F97316] transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                >
-                  <Plus className="w-3 h-3" />
-                </button>
-              </div>
+              <ItemQtyControl item={item} updateQty={updateQty} removeItem={removeItem} />
             </div>
           </div>
         ))}

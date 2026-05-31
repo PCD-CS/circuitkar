@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettings } from "@/lib/settings";
+import { InvoiceActions } from "./InvoiceActions";
 import type { Order, OrderItem, ShippingAddress } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -35,21 +36,7 @@ export default async function OrderInvoicePage({
 
   return (
     <div className="min-h-screen bg-white text-black p-8 max-w-4xl mx-auto print:p-4">
-      {/* Print button — hidden in print */}
-      <div className="mb-6 flex gap-3 print:hidden">
-        <button
-          onClick={() => window.print()}
-          className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-600"
-        >
-          Print / Save as PDF
-        </button>
-        <a
-          href={`/admin/orders/${orderNumber}`}
-          className="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm hover:bg-gray-50"
-        >
-          ← Back to Order
-        </a>
-      </div>
+      <InvoiceActions orderNumber={orderNumber} />
 
       {/* Invoice header */}
       <div className="flex justify-between items-start border-b-2 border-orange-500 pb-6 mb-6">

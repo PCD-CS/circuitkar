@@ -51,8 +51,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const sessionRef = useRef<string>("");
-  // Debounce timers per cart item — prevents in-flight race conditions on rapid clicks
+  // Debounce timer per item — rapid clicks collapse into one API call
   const pendingRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map()) as MutableRefObject<Map<string, ReturnType<typeof setTimeout>>>;
+  // Latest intended qty per item — the closure reads this at fire-time, not the stale captured value
+  const pendingQtyRef = useRef<Map<string, number>>(new Map()) as MutableRefObject<Map<string, number>>;
 
   const headers = useCallback((): HeadersInit => {
     return {
@@ -100,33 +102,46 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const updateQty = useCallback(
     (cartItemId: string, qty: number) => {
-      // Immediately reflect in UI — no wait
+      // Immediately reflect in UI
       setItems((curr) =>
         curr.map((i) => (i.id === cartItemId ? { ...i, quantity: qty } : i)),
       );
+      // Always store the LATEST intended qty — the debounce closure reads this
+      // at fire-time rather than the stale captured value from the closure.
+      pendingQtyRef.current.set(cartItemId, qty);
+
       // Cancel any pending debounced call for this item
       const existing = pendingRef.current.get(cartItemId);
       if (existing !== undefined) clearTimeout(existing);
-      // Debounce the actual API call — rapid clicks collapse into one request
+
+      // Debounce — rapid clicks collapse into one request
       pendingRef.current.set(
         cartItemId,
         setTimeout(async () => {
           pendingRef.current.delete(cartItemId);
+          const latestQty = pendingQtyRef.current.get(cartItemId);
+          if (latestQty === undefined) return;
+          pendingQtyRef.current.delete(cartItemId);
           try {
             const res = await fetch(`/api/cart/${cartItemId}`, {
               method: "PUT",
               headers: headers(),
-              body: JSON.stringify({ quantity: qty }),
+              body: JSON.stringify({ quantity: latestQty }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
-            setItems(data.items ?? []);
+            // Only sync server response when no newer update is pending —
+            // prevents the response from snapping the display back mid-click.
+            if (!pendingRef.current.has(cartItemId)) {
+              setItems(data.items ?? []);
+            }
           } catch {
-            // Sync from server on error instead of using stale prev snapshot
-            refresh();
-            toast("Could not update quantity.", "error");
+            if (!pendingRef.current.has(cartItemId)) {
+              refresh();
+              toast("Could not update quantity.", "error");
+            }
           }
-        }, 350),
+        }, 400),
       );
     },
     [headers, refresh, toast],

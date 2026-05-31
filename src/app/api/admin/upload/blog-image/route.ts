@@ -32,9 +32,19 @@ export async function POST(request: NextRequest) {
   const path = `${Date.now()}_${safeName(file.name)}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error } = await supabase.storage
+  let { error } = await supabase.storage
     .from(BUCKET)
     .upload(path, buffer, { contentType: file.type, upsert: false });
+
+  // Auto-create the bucket if it doesn't exist, then retry once
+  if (error && (error.message.toLowerCase().includes("bucket") || error.message.includes("404"))) {
+    await supabase.storage.createBucket(BUCKET, { public: true });
+    const retry = await supabase.storage
+      .from(BUCKET)
+      .upload(path, buffer, { contentType: file.type, upsert: false });
+    error = retry.error;
+  }
+
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
