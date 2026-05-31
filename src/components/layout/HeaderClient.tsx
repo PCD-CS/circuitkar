@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client";
 const NAV = [
   { label: "Products", href: "/products" },
   { label: "Blog", href: "/blog" },
+  { label: "Tools", href: "/tools" },
   { label: "About", href: "/about" },
   { label: "Contact", href: "/contact" },
 ];

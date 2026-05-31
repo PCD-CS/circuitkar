@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { OutOfStockBadge } from "@/components/product/OutOfStockBadge";
 import { SpecsTable } from "@/components/product/SpecsTable";
 import { NotifyCTA } from "@/components/product/NotifyCTA";
+import { ProductDetailCTA } from "@/components/product/ProductDetailCTA";
 import { ProductGrid } from "@/components/product/ProductGrid";
 import { ProductImages } from "@/components/product/ProductImages";
 import { ProductReviews } from "@/components/product/ProductReviews";
@@ -16,6 +17,7 @@ import {
   getProducts,
 } from "@/lib/products";
 import { formatPrice, discountPercent } from "@/lib/utils";
+import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 export const dynamicParams = true;
@@ -62,11 +64,15 @@ export default async function ProductPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const product = await getProductBySlug(slug);
+  const [product, settings] = await Promise.all([
+    getProductBySlug(slug),
+    getSettings(),
+  ]);
   if (!product) notFound();
 
   const related = await getRelatedProducts(product.category_id, product.id);
   const discount = discountPercent(product.price, product.compare_price);
+  const isLive = settings.launch_mode === "live";
 
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in";
@@ -172,11 +178,15 @@ export default async function ProductPage({
           )}
 
           <div className="mt-6">
-            <NotifyCTA
-              productId={product.id}
-              productName={product.name}
-              initialCount={product.interest_count}
-            />
+            {isLive && product.in_stock ? (
+              <ProductDetailCTA product={product} />
+            ) : (
+              <NotifyCTA
+                productId={product.id}
+                productName={product.name}
+                initialCount={product.interest_count}
+              />
+            )}
           </div>
 
           {product.datasheet_url && (

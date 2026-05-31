@@ -4,6 +4,26 @@ import { requireAdmin } from "@/lib/auth";
 import { getResendClient, getEmailConfig } from "@/lib/resend";
 import { NotifyMeRestockEmail } from "@/lib/emails/notify-me-restock";
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const auth = await requireAdmin(request);
+  if (!auth.ok) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select("*, category:categories(*)")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data) return NextResponse.json({ error: "Product not found." }, { status: 404 });
+  return NextResponse.json({ product: data });
+}
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -63,20 +83,20 @@ export async function PUT(
           if (resend) {
             const siteUrl =
               process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in";
-            const html = NotifyMeRestockEmail({
+            const restockProps = {
               productName: data.name,
               productSlug: data.slug,
               price: data.price,
               stockCount: data.stock_count,
               siteUrl,
-            });
+            };
             await Promise.allSettled(
               emails.map((email) =>
                 resend.emails.send({
                   from: emailConfig.from,
                   to: email,
                   subject: `${data.name} is back in stock — Circuitkar`,
-                  html,
+                  react: NotifyMeRestockEmail(restockProps),
                 }),
               ),
             );

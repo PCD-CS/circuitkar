@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getResendClient, getEmailConfig } from "@/lib/resend";
+import { NotifyMeConfirmationEmail } from "@/lib/emails/notify-me-confirmation";
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest) {
   // Verify product exists
   const { data: product } = await supabase
     .from("products")
-    .select("id, name")
+    .select("id, name, slug")
     .eq("id", productId)
     .maybeSingle();
   if (!product) {
@@ -88,8 +90,8 @@ export async function POST(request: NextRequest) {
     ) ?? -1) + 1 || total || 1;
 
   // Fire-and-forget email notification (does not block the response)
-  if (!alreadyRegistered && process.env.RESEND_API_KEY) {
-    void sendNotificationEmail(email, name, product.name).catch(() => {});
+  if (!alreadyRegistered) {
+    void sendNotificationEmail(email, name, product.name, product.slug ?? product.id, position).catch(() => {});
   }
 
   return NextResponse.json({
@@ -103,34 +105,32 @@ async function sendNotificationEmail(
   email: string,
   name: string | undefined,
   productName: string,
+  productSlug: string,
+  position: number,
 ) {
-  const { Resend } = await import("resend");
-  const resend = new Resend(process.env.RESEND_API_KEY);
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://circuitkar.in";
+  try {
+    const [resend, emailConfig] = await Promise.all([getResendClient(), getEmailConfig()]);
+    if (!resend) return;
 
-  await resend.emails.send({
-    from: "Circuitkar <onboarding@resend.dev>",
-    to: email,
-    subject: `You're on the list for ${productName}`,
-    html: `
-      <div style="font-family: sans-serif; color: #111;">
-        <h2>Thanks${name ? `, ${name}` : ""}! 🎉</h2>
-        <p>You've registered your interest in <strong>${productName}</strong> on Circuitkar.</p>
-        <p>We'll email you the moment it's back in stock.</p>
-        <p style="color:#888; font-size:12px; margin-top:24px;">— Circuitkar · Components for Builders.</p>
-      </div>
-    `,
-  });
-
-  // Notify the admin if configured
-  const adminEmail = process.env.ADMIN_EMAIL;
-  if (adminEmail) {
+    // Customer confirmation — styled React Email template
     await resend.emails.send({
-      from: "Circuitkar <onboarding@resend.dev>",
-      to: adminEmail,
-      subject: `New interest: ${productName}`,
-      html: `<p>${email}${name ? ` (${name})` : ""} registered interest in <strong>${productName}</strong>.</p>`,
+      from: emailConfig.from,
+      to: email,
+      subject: `You're on the list for ${productName} — Circuitkar`,
+      react: NotifyMeConfirmationEmail({ productName, productSlug, position, customerName: name, siteUrl }),
     });
-  }
+
+    // Admin notification
+    if (emailConfig.storeEmail) {
+      await resend.emails.send({
+        from: emailConfig.from,
+        to: emailConfig.storeEmail,
+        subject: `New interest: ${productName}`,
+        html: `<p style="font-family:sans-serif"><strong>${email}</strong>${name ? ` (${name})` : ""} registered interest in <strong>${productName}</strong>. Position #${position}.<br><a href="${siteUrl}/admin/interests">View interests →</a></p>`,
+      });
+    }
+  } catch (e) { console.error("Interest email failed", e); }
 }
 
 export async function GET(request: NextRequest) {

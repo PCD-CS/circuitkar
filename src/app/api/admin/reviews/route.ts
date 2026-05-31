@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
     .order("created_at", { ascending: false });
 
   if (approved === "true") query = query.eq("is_approved", true);
-  if (approved === "false") query = query.eq("is_approved", false);
+  // Pending = explicitly false OR null (newly submitted before moderation sets it)
+  if (approved === "false") query = query.or("is_approved.is.null,is_approved.eq.false");
 
   const { data, error } = await query.limit(100);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
