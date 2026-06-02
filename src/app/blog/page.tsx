@@ -4,6 +4,7 @@ import Image from "next/image";
 import { FileText, Clock, Eye } from "lucide-react";
 import { getPublishedPosts, getAllTags } from "@/lib/blog";
 import { Badge } from "@/components/ui/Badge";
+import TagFilter from "./TagFilter";
 
 function readTime(excerpt: string | null): string {
   // Estimate from excerpt word count × 10 (assuming excerpt is ~10% of full post)
@@ -72,31 +73,11 @@ export default async function BlogPage({
       </form>
 
       {tags.length > 0 && (
-        <div className="mb-8 flex flex-wrap gap-2">
-          <Link
-            href={buildHref({ tag: undefined, page: undefined })}
-            className={`rounded-lg border px-3 py-1 text-xs ${
-              !tag
-                ? "border-[#F97316] bg-[#F9731615] text-[#F97316]"
-                : "border-[#262626] text-[#A3A3A3] hover:text-[#F5F5F5]"
-            }`}
-          >
-            All
-          </Link>
-          {tags.map((t) => (
-            <Link
-              key={t}
-              href={buildHref({ tag: t, page: undefined })}
-              className={`rounded-lg border px-3 py-1 text-xs ${
-                tag === t
-                  ? "border-[#F97316] bg-[#F9731615] text-[#F97316]"
-                  : "border-[#262626] text-[#A3A3A3] hover:text-[#F5F5F5]"
-              }`}
-            >
-              {t}
-            </Link>
-          ))}
-        </div>
+        <TagFilter
+          tagLinks={tags.map((t) => ({ tag: t, href: buildHref({ tag: t, page: undefined }) }))}
+          clearHref={buildHref({ tag: undefined, page: undefined })}
+          currentTag={tag}
+        />
       )}
 
       {posts.length === 0 ? (
