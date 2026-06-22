@@ -14,7 +14,7 @@ export function RecoveryRedirect() {
     const supabase = createClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
-        router.push("/auth/reset-password?next=/admin/login");
+        router.push("/auth/reset-password");
       }
     });
     return () => subscription.unsubscribe();

@@ -10,7 +10,9 @@ import { Input } from "@/components/ui/Input";
 export default function ResetPasswordPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") || "/auth/login";
+  const rawNext = searchParams.get("next") ?? "";
+  // Only allow relative paths to prevent open-redirect attacks
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/auth/login";
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
