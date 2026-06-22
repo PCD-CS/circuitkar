@@ -13,6 +13,9 @@ export async function GET(request: NextRequest) {
   const sortByRaw = searchParams.get("sortBy") ?? "created_at";
   const sortDir = searchParams.get("sortDir") === "asc";
   const sortBy = ["name", "price", "created_at"].includes(sortByRaw) ? sortByRaw : "created_at";
+  const categoryId = searchParams.get("category")?.trim() ?? "";
+  const inStockParam = searchParams.get("inStock") ?? "";
+  const isActiveParam = searchParams.get("isActive") ?? "";
 
   const supabase = createAdminClient();
   let query = supabase
@@ -23,6 +26,19 @@ export async function GET(request: NextRequest) {
 
   if (search) {
     query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,slug.ilike.%${search}%`);
+  }
+  if (categoryId) {
+    query = query.eq("category_id", categoryId);
+  }
+  if (inStockParam === "true") {
+    query = query.eq("in_stock", true);
+  } else if (inStockParam === "false") {
+    query = query.eq("in_stock", false);
+  }
+  if (isActiveParam === "true") {
+    query = query.eq("is_active", true);
+  } else if (isActiveParam === "false") {
+    query = query.eq("is_active", false);
   }
 
   const { data, error, count } = await query;

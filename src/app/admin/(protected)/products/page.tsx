@@ -3,13 +3,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Plus, ExternalLink, Pencil, Search, X, Package, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Plus, ExternalLink, Pencil, Search, X, Package, ChevronUp, ChevronDown, ChevronsUpDown, Filter } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import type { ProductWithCategory } from "@/types";
 
 type SortField = "name" | "price" | "created_at";
 type SortDir = "asc" | "desc";
+
+type Category = { id: string; name: string; slug: string };
 
 const PAGE_SIZES = [10, 25, 50] as const;
 
@@ -85,11 +87,26 @@ export default function AdminProductsPage() {
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
   const [stockModal, setStockModal] = useState<ProductWithCategory | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterInStock, setFilterInStock] = useState("");
+  const [filterIsActive, setFilterIsActive] = useState("");
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
 
   const totalPages = Math.ceil(total / pageSize);
 
-  const fetchProducts = useCallback(async (p: number, q: string, ps: number, sb: SortField, sd: SortDir) => {
+  const activeFilterCount = [filterCategory, filterInStock, filterIsActive].filter(Boolean).length;
+
+  useEffect(() => {
+    fetch("/api/admin/categories")
+      .then(r => r.json())
+      .then(d => setCategories(d.categories ?? []));
+  }, []);
+
+  const fetchProducts = useCallback(async (
+    p: number, q: string, ps: number, sb: SortField, sd: SortDir,
+    cat: string, inStock: string, isActive: string,
+  ) => {
     setLoading(true);
     const params = new URLSearchParams({
       page: String(p),
@@ -98,6 +115,9 @@ export default function AdminProductsPage() {
       sortDir: sd,
     });
     if (q.trim()) params.set("search", q.trim());
+    if (cat) params.set("category", cat);
+    if (inStock) params.set("inStock", inStock);
+    if (isActive) params.set("isActive", isActive);
     const res = await fetch(`/api/admin/products?${params}`);
     const data = await res.json();
     setProducts(data.products ?? []);
@@ -106,8 +126,15 @@ export default function AdminProductsPage() {
   }, []);
 
   useEffect(() => {
-    fetchProducts(page, search, pageSize, sortBy, sortDir);
-  }, [fetchProducts, page, search, pageSize, sortBy, sortDir]);
+    fetchProducts(page, search, pageSize, sortBy, sortDir, filterCategory, filterInStock, filterIsActive);
+  }, [fetchProducts, page, search, pageSize, sortBy, sortDir, filterCategory, filterInStock, filterIsActive]);
+
+  function clearFilters() {
+    setFilterCategory("");
+    setFilterInStock("");
+    setFilterIsActive("");
+    setPage(1);
+  }
 
   function handleSearchInput(val: string) {
     setSearchInput(val);
@@ -226,6 +253,55 @@ export default function AdminProductsPage() {
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 text-xs text-[#525252]">
+          <Filter className="w-3.5 h-3.5" />
+          <span>Filter:</span>
+        </div>
+
+        <select
+          value={filterCategory}
+          onChange={(e) => { setFilterCategory(e.target.value); setPage(1); }}
+          className="bg-[#161616] border border-[#262626] rounded-lg px-3 py-1.5 text-sm text-[#F5F5F5] focus:outline-none focus:border-[#F97316]"
+        >
+          <option value="">All Categories</option>
+          {categories.map(c => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+
+        <select
+          value={filterInStock}
+          onChange={(e) => { setFilterInStock(e.target.value); setPage(1); }}
+          className="bg-[#161616] border border-[#262626] rounded-lg px-3 py-1.5 text-sm text-[#F5F5F5] focus:outline-none focus:border-[#F97316]"
+        >
+          <option value="">All Stock</option>
+          <option value="true">In Stock</option>
+          <option value="false">Out of Stock</option>
+        </select>
+
+        <select
+          value={filterIsActive}
+          onChange={(e) => { setFilterIsActive(e.target.value); setPage(1); }}
+          className="bg-[#161616] border border-[#262626] rounded-lg px-3 py-1.5 text-sm text-[#F5F5F5] focus:outline-none focus:border-[#F97316]"
+        >
+          <option value="">All Status</option>
+          <option value="true">Active</option>
+          <option value="false">Inactive</option>
+        </select>
+
+        {activeFilterCount > 0 && (
+          <button
+            onClick={clearFilters}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#EF4444] border border-[#EF4444]/30 rounded-lg hover:bg-[#EF444415] transition-colors"
+          >
+            <X className="w-3 h-3" />
+            Clear {activeFilterCount} filter{activeFilterCount > 1 ? "s" : ""}
+          </button>
+        )}
+      </div>
+
       {/* Table */}
       {loading ? (
         <div className="bg-[#161616] border border-[#262626] rounded-lg divide-y divide-[#1A1A1A]">
@@ -242,8 +318,12 @@ export default function AdminProductsPage() {
       ) : products.length === 0 ? (
         <div className="bg-[#161616] border border-[#262626] rounded-lg flex flex-col items-center justify-center py-20 text-center">
           <Package className="w-10 h-10 text-[#525252] mb-3" />
-          <p className="text-[#A3A3A3] text-sm">{search ? `No products matching "${search}"` : "No products yet."}</p>
-          {!search && (
+          <p className="text-[#A3A3A3] text-sm">
+            {search || activeFilterCount > 0 ? "No products match the current filters." : "No products yet."}
+          </p>
+          {search || activeFilterCount > 0 ? (
+            <button onClick={() => { setSearchInput(""); setSearch(""); clearFilters(); }} className="mt-3 text-sm text-[#F97316] hover:underline">Clear all filters</button>
+          ) : (
             <Link href="/admin/products/new" className="mt-3 text-sm text-[#F97316] hover:underline">Add your first product →</Link>
           )}
         </div>
