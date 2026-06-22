@@ -51,7 +51,7 @@ export default function AdminLoginPage() {
     const supabase = createClient();
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
     await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${siteUrl}/auth/reset-password`,
+      redirectTo: `${siteUrl}/auth/reset-password?next=/admin/login`,
     });
     // Always show success — don't reveal if email exists
     setResetSent(true);
