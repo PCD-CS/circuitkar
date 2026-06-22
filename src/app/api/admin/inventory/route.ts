@@ -28,20 +28,37 @@ export async function GET(request: NextRequest) {
   const lowStockThreshold = parseInt(settings.low_stock_threshold || "5");
   const search = searchParams.get("search")?.trim() ?? "";
   const filter = searchParams.get("filter") ?? "all"; // all | low | out
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
+  const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get("pageSize") ?? "25")));
+  const sortByRaw = searchParams.get("sortBy") ?? "name";
+  const sortBy = ["name", "stock_count", "price"].includes(sortByRaw) ? sortByRaw : "name";
+  const sortAsc = searchParams.get("sortDir") !== "desc";
 
   let query = supabase
     .from("products")
-    .select("id, name, sku, slug, images, price, cost_price, in_stock, stock_count, is_active, category:categories(name)")
-    .order("name");
+    .select("id, name, sku, slug, images, price, cost_price, in_stock, stock_count, is_active, category:categories(name)", { count: "exact" })
+    .order(sortBy, { ascending: sortAsc })
+    .range((page - 1) * pageSize, page * pageSize - 1);
 
-  if (search) query = query.ilike("name", `%${search}%`);
+  if (search) query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%`);
   if (filter === "out") query = query.eq("in_stock", false);
   if (filter === "low") query = query.eq("in_stock", true).lte("stock_count", lowStockThreshold).gt("stock_count", 0);
 
-  const { data, error } = await query;
+  const { data, error, count } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ products: data ?? [], lowStockThreshold });
+  // Summary counts (unfiltered, for stat cards)
+  const [{ count: lowCount }, { count: outCount }] = await Promise.all([
+    supabase.from("products").select("*", { count: "exact", head: true }).eq("in_stock", true).lte("stock_count", lowStockThreshold).gt("stock_count", 0),
+    supabase.from("products").select("*", { count: "exact", head: true }).eq("in_stock", false),
+  ]);
+
+  return NextResponse.json({
+    products: data ?? [],
+    total: count ?? 0,
+    lowStockThreshold,
+    summary: { low: lowCount ?? 0, out: outCount ?? 0 },
+  });
 }
 
 export async function PATCH(request: NextRequest) {
