@@ -11,6 +11,7 @@ import { CartProvider } from "@/lib/cart-context";
 import { SiteConfigProvider } from "@/lib/site-config";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 import { MaintenanceOverlay } from "@/components/layout/MaintenanceOverlay";
+import { RecoveryRedirect } from "@/components/layout/RecoveryRedirect";
 import { getSettings } from "@/lib/settings";
 import type { LaunchMode } from "@/types";
 
@@ -101,6 +102,7 @@ export default async function RootLayout({
         className={`${spaceMono.variable} ${dmSans.variable} ${jetbrainsMono.variable} font-body`}
       >
         <ToastProvider>
+          <RecoveryRedirect />
           {isAdmin ? (
             children
           ) : (
