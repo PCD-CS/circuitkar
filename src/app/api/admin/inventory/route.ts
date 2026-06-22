@@ -93,21 +93,22 @@ export async function PATCH(request: NextRequest) {
 
   if (!product) return NextResponse.json({ error: "Product not found." }, { status: 404 });
 
-  let newStock = product.stock_count ?? 0;
+  const prevStock = product.stock_count ?? 0;
+  let newStock = prevStock;
   let eventType: string;
   let qtyChange: number;
 
   if (body.action === "set") {
-    qtyChange = body.quantity - newStock;
+    qtyChange = body.quantity - prevStock;
     newStock = body.quantity;
-    eventType = "adjustment";
+    eventType = prevStock === 0 && body.quantity > 0 ? "restock" : "adjustment";
   } else if (body.action === "add") {
     qtyChange = body.quantity;
-    newStock = newStock + body.quantity;
-    eventType = "restock";
+    newStock = prevStock + body.quantity;
+    eventType = prevStock === 0 ? "restock" : "restock";
   } else {
     qtyChange = -body.quantity;
-    newStock = Math.max(0, newStock - body.quantity);
+    newStock = Math.max(0, prevStock - body.quantity);
     eventType = "adjustment";
   }
 
@@ -117,11 +118,17 @@ export async function PATCH(request: NextRequest) {
     updated_at: new Date().toISOString(),
   }).eq("id", body.productId);
 
+  const absVal = Math.abs(qtyChange);
+  const direction = qtyChange > 0 ? `+${absVal} added` : `${qtyChange} removed`;
+  const autoNote = body.action === "set"
+    ? `Set to ${newStock} (was ${prevStock})`
+    : `${direction} — was ${prevStock}, now ${newStock}`;
+
   await supabase.from("inventory_events").insert({
     product_id: body.productId,
     event_type: eventType,
     quantity_change: qtyChange,
-    notes: body.note || `Manual ${body.action} by admin`,
+    notes: body.note ? `${body.note} — ${autoNote}` : autoNote,
   });
 
   return NextResponse.json({ stock_count: newStock });

@@ -44,10 +44,10 @@ export async function PUT(
 
   const supabase = createAdminClient();
 
-  // Capture previous stock state to detect a false -> true transition.
+  // Capture previous stock state before update.
   const { data: prev } = await supabase
     .from("products")
-    .select("in_stock")
+    .select("in_stock, stock_count")
     .eq("id", id)
     .maybeSingle();
 
@@ -59,6 +59,23 @@ export async function PUT(
     .single();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  // Write an inventory event whenever stock_count changes.
+  const prevStock = prev?.stock_count ?? 0;
+  const newStock = data.stock_count ?? 0;
+  if (newStock !== prevStock) {
+    const delta = newStock - prevStock;
+    const eventType = prevStock === 0 && newStock > 0 ? "restock" : "adjustment";
+    const absVal = Math.abs(delta);
+    const direction = delta > 0 ? `+${absVal} added` : `${delta} removed`;
+    const note = `${direction} — was ${prevStock}, now ${newStock} (updated via admin)`;
+    await supabase.from("inventory_events").insert({
+      product_id: id,
+      event_type: eventType,
+      quantity_change: delta,
+      notes: note,
+    });
   }
 
   // Restock notification — only when in_stock flipped false -> true.
