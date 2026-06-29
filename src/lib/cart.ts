@@ -35,6 +35,14 @@ export async function getOrCreateCart(
       .eq("customer_id", userId)
       .maybeSingle();
     if (existing) return existing.id;
+
+    // carts.customer_id has a FK to customer_profiles(id). The signup trigger
+    // normally creates this row, but it swallows errors silently — ensure it
+    // exists here so a missed trigger doesn't break cart creation.
+    await supabase
+      .from("customer_profiles")
+      .upsert({ id: userId }, { onConflict: "id", ignoreDuplicates: true });
+
     const { data: created } = await supabase
       .from("carts")
       .insert({ customer_id: userId })
