@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Mono, DM_Sans, JetBrains_Mono } from "next/font/google";
 import { GoogleAnalytics } from "@next/third-parties/google";
+import { FacebookPixel } from "@/components/layout/FacebookPixel";
 import { headers } from "next/headers";
 import "./globals.css";
 import { Header } from "@/components/layout/Header";
@@ -94,7 +95,8 @@ export default async function RootLayout({
   const isAdmin = pathname.startsWith("/admin");
 
   const settings = isAdmin ? null : await getSettings();
-  const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+  const gaId = settings?.ga_measurement_id || process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+  const fbPixelId = settings?.fb_pixel_id;
 
   return (
     <html lang="en">
@@ -132,6 +134,7 @@ export default async function RootLayout({
           )}
         </ToastProvider>
         {gaId && <GoogleAnalytics gaId={gaId} />}
+        {fbPixelId && <FacebookPixel pixelId={fbPixelId} />}
       </body>
     </html>
   );
